@@ -18,7 +18,8 @@ public class Assembly : ModuleRules
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
-			"Slate"
+			"Slate",
+			"Json"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

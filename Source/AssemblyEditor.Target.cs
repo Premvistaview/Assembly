@@ -11,5 +11,6 @@ public class AssemblyEditorTarget : TargetRules
 		DefaultBuildSettings = BuildSettingsVersion.V6;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_7;
 		ExtraModuleNames.Add("Assembly");
+		ExtraModuleNames.Add("AssemblyEditor");
 	}
 }
