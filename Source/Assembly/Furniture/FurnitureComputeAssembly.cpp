@@ -30,6 +30,8 @@ namespace
 		Free,
 		Wall,
 		Swing,
+		Window,
+		Clearance,
 		Occupied
 	};
 
@@ -57,6 +59,9 @@ namespace
 		float OffsetCm = 0.f;
 		float WidthCm = 90.f;
 		float SwingCm = 90.f;
+		/** Bottom of this opening above the floor. Doors sit on the ground. Windows default higher. */
+		float SillCm = 0.f;
+		float HeightCm = 210.f;
 	};
 
 	struct FSpaceSpec
@@ -70,7 +75,11 @@ namespace
 		float OriginY = 0.f;
 		float SizeX = 0.f;
 		float SizeY = 0.f;
+		float TotalSizeX = 0.f;
+		float TotalSizeY = 0.f;
+		bool bHasTotalSize = false;
 		TArray<FDoorSpec> Doors;
+		TArray<FDoorSpec> Windows;
 	};
 
 	struct FGridPose
@@ -90,30 +99,63 @@ namespace
 	{
 		float OriginX = 0.f;
 		float OriginY = 0.f;
+		float OriginZ = 0.f;
+		/** Usable east-west and north-south size after swing, in centimeters. Zero uses the wall grid. */
+		float UsableEastWest = 0.f;
+		float UsableNorthSouth = 0.f;
 		int32 CellsX = 0;
 		int32 CellsY = 0;
+		int32 CellsZ = 1;
 		TArray<ECell> Cells;
 		TArray<FDoorSpec> Doors;
+		TArray<FDoorSpec> Windows;
+		bool bRelaxedClearance = false;
+
+		int32 IndexOf(int32 X, int32 Y, int32 Z) const
+		{
+			return X + Y * CellsX + Z * CellsX * CellsY;
+		}
 
 		bool InBounds(int32 X, int32 Y) const
 		{
 			return X >= 0 && Y >= 0 && X < CellsX && Y < CellsY;
 		}
 
+		bool InBounds(int32 X, int32 Y, int32 Z) const
+		{
+			return InBounds(X, Y) && Z >= 0 && Z < CellsZ;
+		}
+
+		/** Ground layer. Props are anchored on z = 0. */
 		ECell Get(int32 X, int32 Y) const
 		{
-			if (!InBounds(X, Y))
+			return Get(X, Y, 0);
+		}
+
+		ECell Get(int32 X, int32 Y, int32 Z) const
+		{
+			if (!InBounds(X, Y, Z))
 			{
 				return ECell::Wall;
 			}
-			return Cells[X + Y * CellsX];
+			return Cells[IndexOf(X, Y, Z)];
 		}
 
 		void SetIfFree(int32 X, int32 Y, ECell Value)
 		{
-			if (InBounds(X, Y) && Cells[X + Y * CellsX] == ECell::Free)
+			SetIfFree(X, Y, 0, Value);
+		}
+
+		void SetIfFree(int32 X, int32 Y, int32 Z, ECell Value)
+		{
+			if (!InBounds(X, Y, Z))
 			{
-				Cells[X + Y * CellsX] = Value;
+				return;
+			}
+			ECell& Cell = Cells[IndexOf(X, Y, Z)];
+			if (Cell == ECell::Free)
+			{
+				Cell = Value;
 			}
 		}
 
@@ -127,10 +169,12 @@ namespace
 			{
 				for (int32 X = Pose.MinX; X < Pose.MinX + Pose.SizeX; ++X)
 				{
-					if (Get(X, Y) != ECell::Free)
+					const ECell Cell = Get(X, Y);
+					if (Cell == ECell::Free || (bRelaxedClearance && Cell == ECell::Clearance))
 					{
-						return false;
+						continue;
 					}
+					return false;
 				}
 			}
 			return true;
@@ -138,12 +182,28 @@ namespace
 
 		void Occupy(const FGridPose& Pose)
 		{
+			for (int32 Y = Pose.MinY; Y < Pose.MinY + Pose.SizeY; ++Y)
+			{
+				for (int32 X = Pose.MinX; X < Pose.MinX + Pose.SizeX; ++X)
+				{
+					if (!InBounds(X, Y))
+					{
+						continue;
+					}
+					ECell& Cell = Cells[IndexOf(X, Y, 0)];
+					if (Cell == ECell::Free || Cell == ECell::Clearance)
+					{
+						Cell = ECell::Occupied;
+					}
+				}
+			}
+
 			constexpr int32 Margin = 1;
 			for (int32 Y = Pose.MinY - Margin; Y < Pose.MinY + Pose.SizeY + Margin; ++Y)
 			{
 				for (int32 X = Pose.MinX - Margin; X < Pose.MinX + Pose.SizeX + Margin; ++X)
 				{
-					SetIfFree(X, Y, ECell::Occupied);
+					SetIfFree(X, Y, ECell::Clearance);
 				}
 			}
 		}
@@ -156,6 +216,7 @@ namespace
 		FString Label;
 		float X = 0.f;
 		float Y = 0.f;
+		float Z = 0.f;
 		float Yaw = 0.f;
 		float SizeX = 0.f;
 		float SizeY = 0.f;
@@ -182,8 +243,8 @@ namespace
 	{
 		switch (BackWall)
 		{
-		case EPlanWall::North: return -90.f;
-		case EPlanWall::South: return 90.f;
+		case EPlanWall::North: return 90.f;
+		case EPlanWall::South: return -90.f;
 		case EPlanWall::East: return 180.f;
 		case EPlanWall::West: return 0.f;
 		default: return 0.f;
@@ -195,6 +256,7 @@ namespace
 		switch (Kind)
 		{
 		case EFurnitureKind::Bed: return TEXT("Bed");
+		case EFurnitureKind::BedLamp: return TEXT("BedLamp");
 		case EFurnitureKind::Wardrobe: return TEXT("Wardrobe");
 		case EFurnitureKind::Toilet: return TEXT("Toilet");
 		case EFurnitureKind::WashBasin: return TEXT("WashBasin");
@@ -220,6 +282,7 @@ namespace
 		{
 		case EFurnitureRoom::Bedroom:
 			OutProps.Add({ EFurnitureKind::Bed, EPropAnchor::Wall });
+			OutProps.Add({ EFurnitureKind::BedLamp, EPropAnchor::Beside });
 			OutProps.Add({ EFurnitureKind::Wardrobe, EPropAnchor::Beside });
 			break;
 		case EFurnitureRoom::Toilet:
@@ -451,14 +514,19 @@ namespace
 		return false;
 	}
 
-	bool BuildGrid(const FSpaceSpec& Space, FRoomGrid& Grid, FString& OutError)
+	bool BuildGrid(const FSpaceSpec& Space, float PlanOriginX, float PlanOriginY, float PlanOriginZ, FRoomGrid& Grid, FString& OutError)
 	{
 		Grid = FRoomGrid();
-		Grid.OriginX = Space.OriginX;
-		Grid.OriginY = Space.OriginY;
+		Grid.OriginX = PlanOriginX + Space.OriginX;
+		Grid.OriginY = PlanOriginY + Space.OriginY;
+		Grid.OriginZ = PlanOriginZ;
+		Grid.UsableEastWest = Space.bHasTotalSize ? Space.TotalSizeX : 0.f;
+		Grid.UsableNorthSouth = Space.bHasTotalSize ? Space.TotalSizeY : 0.f;
 		Grid.Doors = Space.Doors;
+		Grid.Windows = Space.Windows;
 		Grid.CellsX = CellsForCm(Space.SizeX);
 		Grid.CellsY = CellsForCm(Space.SizeY);
+		Grid.CellsZ = FMath::Clamp(CellsForCm(300.f), 3, 36);
 		if (Grid.CellsX < 3 || Grid.CellsY < 3)
 		{
 			OutError = FString::Printf(TEXT("%s is smaller than the 10 cm wall grid"), *Space.Name);
@@ -469,42 +537,56 @@ namespace
 			OutError = FString::Printf(TEXT("%s is too large for a 10 cm grid"), *Space.Name);
 			return false;
 		}
+		const int64 Volume = static_cast<int64>(Grid.CellsX) * Grid.CellsY * Grid.CellsZ;
+		if (Volume > 1500000)
+		{
+			OutError = FString::Printf(TEXT("%s is too large for a 10 cm cube grid"), *Space.Name);
+			return false;
+		}
 
-		Grid.Cells.SetNum(Grid.CellsX * Grid.CellsY);
+		Grid.Cells.SetNum(static_cast<int32>(Volume));
 		for (ECell& Cell : Grid.Cells)
 		{
 			Cell = ECell::Free;
 		}
-		for (int32 X = 0; X < Grid.CellsX; ++X)
+		for (int32 Z = 0; Z < Grid.CellsZ; ++Z)
 		{
-			Grid.Cells[X] = ECell::Wall;
-			Grid.Cells[X + (Grid.CellsY - 1) * Grid.CellsX] = ECell::Wall;
-		}
-		for (int32 Y = 0; Y < Grid.CellsY; ++Y)
-		{
-			Grid.Cells[Y * Grid.CellsX] = ECell::Wall;
-			Grid.Cells[(Grid.CellsX - 1) + Y * Grid.CellsX] = ECell::Wall;
+			for (int32 X = 0; X < Grid.CellsX; ++X)
+			{
+				Grid.Cells[Grid.IndexOf(X, 0, Z)] = ECell::Wall;
+				Grid.Cells[Grid.IndexOf(X, Grid.CellsY - 1, Z)] = ECell::Wall;
+			}
+			for (int32 Y = 0; Y < Grid.CellsY; ++Y)
+			{
+				Grid.Cells[Grid.IndexOf(0, Y, Z)] = ECell::Wall;
+				Grid.Cells[Grid.IndexOf(Grid.CellsX - 1, Y, Z)] = ECell::Wall;
+			}
 		}
 
-		auto MarkSpan = [&Grid](EPlanWall Wall, int32 Start, int32 End, int32 SwingCells)
+		auto MarkVolume = [&Grid](EPlanWall Wall, int32 Start, int32 End, int32 DepthCells, int32 Z0, int32 Z1, ECell Blocked)
 		{
 			Start = FMath::Clamp(Start, 0, (Wall == EPlanWall::North || Wall == EPlanWall::South) ? Grid.CellsX : Grid.CellsY);
 			End = FMath::Clamp(End, Start, (Wall == EPlanWall::North || Wall == EPlanWall::South) ? Grid.CellsX : Grid.CellsY);
-			for (int32 Along = Start; Along < End; ++Along)
+			Z0 = FMath::Clamp(Z0, 0, Grid.CellsZ);
+			Z1 = FMath::Clamp(Z1, Z0, Grid.CellsZ);
+			for (int32 Z = Z0; Z < Z1; ++Z)
 			{
-				for (int32 Step = 1; Step <= SwingCells; ++Step)
+				for (int32 Along = Start; Along < End; ++Along)
 				{
-					int32 X = 0;
-					int32 Y = 0;
-					switch (Wall)
+					for (int32 Step = 1; Step <= DepthCells; ++Step)
 					{
-					case EPlanWall::North: X = Along; Y = Step; break;
-					case EPlanWall::South: X = Along; Y = Grid.CellsY - 1 - Step; break;
-					case EPlanWall::West: X = Step; Y = Along; break;
-					case EPlanWall::East: X = Grid.CellsX - 1 - Step; Y = Along; break;
-					default: break;
+						int32 X = 0;
+						int32 Y = 0;
+						switch (Wall)
+						{
+						case EPlanWall::North: X = Along; Y = Step; break;
+						case EPlanWall::South: X = Along; Y = Grid.CellsY - 1 - Step; break;
+						case EPlanWall::West: X = Step; Y = Along; break;
+						case EPlanWall::East: X = Grid.CellsX - 1 - Step; Y = Along; break;
+						default: break;
+						}
+						Grid.SetIfFree(X, Y, Z, Blocked);
 					}
-					Grid.SetIfFree(X, Y, ECell::Swing);
 				}
 			}
 		};
@@ -514,7 +596,17 @@ namespace
 			const int32 Start = FMath::FloorToInt(Door.OffsetCm / CellCm);
 			const int32 End = FMath::CeilToInt((Door.OffsetCm + Door.WidthCm) / CellCm - 0.001f);
 			const int32 SwingCells = CellsForCm(Door.SwingCm);
-			MarkSpan(Door.Wall, Start, End, SwingCells);
+			const int32 HeightCells = FMath::Max(1, CellsForCm(Door.HeightCm));
+			MarkVolume(Door.Wall, Start, End, SwingCells, 0, HeightCells, ECell::Swing);
+		}
+		for (const FDoorSpec& Window : Grid.Windows)
+		{
+			const int32 Start = FMath::FloorToInt(Window.OffsetCm / CellCm);
+			const int32 End = FMath::CeilToInt((Window.OffsetCm + Window.WidthCm) / CellCm - 0.001f);
+			const int32 DepthCells = CellsForCm(Window.SwingCm);
+			const int32 SillCells = FMath::Max(0, FMath::FloorToInt(Window.SillCm / CellCm));
+			const int32 HeightCells = FMath::Max(1, CellsForCm(Window.HeightCm));
+			MarkVolume(Window.Wall, Start, End, DepthCells, SillCells, SillCells + HeightCells, ECell::Window);
 		}
 		return true;
 	}
@@ -644,19 +736,6 @@ namespace
 		return EPlanWall::North;
 	}
 
-	bool PlaceOnWalls(const FRoomGrid& Grid, const TArray<EPlanWall>& Order, int32 AlongCells, int32 IntoCells, float AlongCm, float IntoCm, int32 DesiredAlong, bool bUseDesiredOnFirstWall, FGridPose& OutPose)
-	{
-		for (int32 Index = 0; Index < Order.Num(); ++Index)
-		{
-			const int32 Desired = (Index == 0 && bUseDesiredOnFirstWall) ? DesiredAlong : 1;
-			if (FindBestOnWall(Grid, Order[Index], AlongCells, IntoCells, AlongCm, IntoCm, Desired, OutPose))
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-
 	bool FindCentered(const FRoomGrid& Grid, int32 SizeX, int32 SizeY, float Yaw, float LocalX, float LocalY, FGridPose& OutPose)
 	{
 		bool bFound = false;
@@ -690,29 +769,135 @@ namespace
 		return bFound;
 	}
 
-	void MeasureKind(EFurnitureKind Kind, float& OutWidthCm, float& OutDepthCm)
+	float InteriorWallCm(const FRoomGrid& Grid, bool bEastWest)
 	{
-		float WidthFeet = 2.f;
-		float DepthFeet = 2.f;
-		float Yaw = 0.f;
-		FurnitureKindDefaultSize(Kind, WidthFeet, DepthFeet, Yaw);
-		OutWidthCm = WidthFeet * 30.48f;
-		OutDepthCm = DepthFeet * 30.48f;
+		if (bEastWest && Grid.UsableEastWest > CellCm)
+		{
+			return Grid.UsableEastWest;
+		}
+		if (!bEastWest && Grid.UsableNorthSouth > CellCm)
+		{
+			return Grid.UsableNorthSouth;
+		}
+		const int32 Cells = bEastWest ? Grid.CellsX : Grid.CellsY;
+		return static_cast<float>(FMath::Max(1, Cells - 2)) * CellCm;
 	}
 
-	void WallFootprint(EFurnitureKind Kind, float& OutAlongCm, float& OutIntoCm)
+	int32 LongestOpenRun(const FRoomGrid& Grid, EPlanWall Wall)
 	{
-		float WidthCm = 0.f;
-		float DepthCm = 0.f;
-		MeasureKind(Kind, WidthCm, DepthCm);
-		if (Kind == EFurnitureKind::Television)
+		int32 Best = 0;
+		int32 Run = 0;
+		const bool bHorizontal = Wall == EPlanWall::North || Wall == EPlanWall::South;
+		const int32 Limit = bHorizontal ? Grid.CellsX - 1 : Grid.CellsY - 1;
+		for (int32 Along = 1; Along < Limit; ++Along)
 		{
-			OutAlongCm = DepthCm;
-			OutIntoCm = WidthCm;
+			int32 X = 0;
+			int32 Y = 0;
+			switch (Wall)
+			{
+			case EPlanWall::North: X = Along; Y = 1; break;
+			case EPlanWall::South: X = Along; Y = FMath::Max(1, Grid.CellsY - 2); break;
+			case EPlanWall::West: X = 1; Y = Along; break;
+			case EPlanWall::East: X = FMath::Max(1, Grid.CellsX - 2); Y = Along; break;
+			default: break;
+			}
+			const ECell Cell = Grid.Get(X, Y);
+			if (Cell == ECell::Free || Cell == ECell::Clearance)
+			{
+				++Run;
+				Best = FMath::Max(Best, Run);
+			}
+			else
+			{
+				Run = 0;
+			}
+		}
+		return Best;
+	}
+
+	void CategoryWallShare(EFurnitureKind Kind, float& OutAlongShare, float& OutIntoShare)
+	{
+		OutAlongShare = 0.40f;
+		OutIntoShare = 0.30f;
+		switch (Kind)
+		{
+		case EFurnitureKind::Bed: OutAlongShare = 0.65f; OutIntoShare = 0.52f; break;
+		case EFurnitureKind::BedLamp: OutAlongShare = 0.14f; OutIntoShare = 0.14f; break;
+		case EFurnitureKind::Wardrobe: OutAlongShare = 0.42f; OutIntoShare = 0.22f; break;
+		case EFurnitureKind::Toilet: OutAlongShare = 0.38f; OutIntoShare = 0.55f; break;
+		case EFurnitureKind::WashBasin: OutAlongShare = 0.30f; OutIntoShare = 0.34f; break;
+		case EFurnitureKind::UtilitySink: OutAlongShare = 0.42f; OutIntoShare = 0.45f; break;
+		case EFurnitureKind::KitchenSink: OutAlongShare = 0.42f; OutIntoShare = 0.28f; break;
+		case EFurnitureKind::Stove: OutAlongShare = 0.32f; OutIntoShare = 0.32f; break;
+		case EFurnitureKind::Fridge: OutAlongShare = 0.30f; OutIntoShare = 0.32f; break;
+		case EFurnitureKind::DiningTable: OutAlongShare = 0.62f; OutIntoShare = 0.50f; break;
+		case EFurnitureKind::DiningChair: OutAlongShare = 0.22f; OutIntoShare = 0.22f; break;
+		case EFurnitureKind::Sofa: OutAlongShare = 0.65f; OutIntoShare = 0.48f; break;
+		case EFurnitureKind::CoffeeTable: OutAlongShare = 0.42f; OutIntoShare = 0.28f; break;
+		case EFurnitureKind::Television: OutAlongShare = 0.38f; OutIntoShare = 0.14f; break;
+		case EFurnitureKind::Plant: OutAlongShare = 0.16f; OutIntoShare = 0.16f; break;
+		case EFurnitureKind::Car: OutAlongShare = 0.86f; OutIntoShare = 0.90f; break;
+		default: break;
+		}
+	}
+
+	float ClampToWall(float RequestedCm, float WallCm)
+	{
+		const float Minimum = CellCm * 2.f;
+		const float Maximum = FMath::Max(Minimum, WallCm - CellCm);
+		return FMath::Clamp(RequestedCm, Minimum, Maximum);
+	}
+
+	/** Along-wall and into-room sizes from the clear distance between walls. */
+	void SizeFromWallDistance(const FRoomGrid& Grid, EFurnitureKind Kind, EPlanWall Wall, float& OutAlongCm, float& OutIntoCm)
+	{
+		float AlongShare = 0.40f;
+		float IntoShare = 0.30f;
+		CategoryWallShare(Kind, AlongShare, IntoShare);
+
+		const bool bAlongEastWest = Wall == EPlanWall::North || Wall == EPlanWall::South;
+		const float FullAlong = InteriorWallCm(Grid, bAlongEastWest);
+		const float FullAcross = InteriorWallCm(Grid, !bAlongEastWest);
+		const int32 OpenCells = LongestOpenRun(Grid, Wall);
+		const float OpenAlong = OpenCells > 0 ? OpenCells * CellCm : FullAlong;
+
+		OutAlongCm = ClampToWall(FullAlong * AlongShare, OpenAlong + CellCm);
+		OutIntoCm = ClampToWall(FullAcross * IntoShare, FullAcross);
+	}
+
+	/** East-west and north-south sizes from the two wall-to-wall distances. */
+	void FootprintFromWallDistance(const FRoomGrid& Grid, EFurnitureKind Kind, float& OutWidthCm, float& OutDepthCm)
+	{
+		float WidthShare = 0.40f;
+		float DepthShare = 0.30f;
+		CategoryWallShare(Kind, WidthShare, DepthShare);
+		const float WidthWall = InteriorWallCm(Grid, true);
+		const float DepthWall = InteriorWallCm(Grid, false);
+		if (Kind == EFurnitureKind::DiningChair || Kind == EFurnitureKind::Plant || Kind == EFurnitureKind::BedLamp)
+		{
+			const float Side = ClampToWall(FMath::Min(WidthWall, DepthWall) * WidthShare, FMath::Min(WidthWall, DepthWall));
+			OutWidthCm = Side;
+			OutDepthCm = Side;
 			return;
 		}
-		OutAlongCm = WidthCm;
-		OutIntoCm = DepthCm;
+		OutWidthCm = ClampToWall(WidthWall * WidthShare, WidthWall);
+		OutDepthCm = ClampToWall(DepthWall * DepthShare, DepthWall);
+	}
+
+	bool PlaceKindOnWalls(const FRoomGrid& Grid, EFurnitureKind Kind, const TArray<EPlanWall>& Order, int32 DesiredAlong, bool bUseDesiredOnFirstWall, FGridPose& OutPose)
+	{
+		for (int32 Index = 0; Index < Order.Num(); ++Index)
+		{
+			float AlongCm = 0.f;
+			float IntoCm = 0.f;
+			SizeFromWallDistance(Grid, Kind, Order[Index], AlongCm, IntoCm);
+			const int32 Desired = (Index == 0 && bUseDesiredOnFirstWall) ? DesiredAlong : 1;
+			if (FindBestOnWall(Grid, Order[Index], CellsForCm(AlongCm), CellsForCm(IntoCm), AlongCm, IntoCm, Desired, OutPose))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	bool PlaceInFront(const FRoomGrid& Grid, const FGridPose& Primary, int32 ParallelCells, int32 AwayCells, float ParallelCm, float AwayCm, FGridPose& OutPose)
@@ -902,6 +1087,7 @@ namespace
 		Object.Label = FurnitureKindLabel(Kind);
 		Object.X = Grid.OriginX + (Pose.MinX + Pose.SizeX * 0.5f) * CellCm;
 		Object.Y = Grid.OriginY + (Pose.MinY + Pose.SizeY * 0.5f) * CellCm;
+		Object.Z = Grid.OriginZ;
 		Object.Yaw = Pose.Yaw;
 		Object.SizeX = Pose.LocalXCm;
 		Object.SizeY = Pose.LocalYCm;
@@ -936,9 +1122,19 @@ namespace
 			{
 				float WidthCm = 0.f;
 				float DepthCm = 0.f;
-				MeasureKind(Prop.Kind, WidthCm, DepthCm);
+				FootprintFromWallDistance(Grid, Prop.Kind, WidthCm, DepthCm);
 				TArray<FGridPose> Chairs;
-				if (!PlaceAround(Grid, PrimaryPose, WidthCm, Chairs))
+				Grid.bRelaxedClearance = false;
+				bool bChairsFit = PlaceAround(Grid, PrimaryPose, WidthCm, Chairs);
+				bool bReduced = false;
+				if (!bChairsFit)
+				{
+					Grid.bRelaxedClearance = true;
+					bChairsFit = PlaceAround(Grid, PrimaryPose, WidthCm, Chairs);
+					bReduced = bChairsFit;
+					Grid.bRelaxedClearance = false;
+				}
+				if (!bChairsFit)
 				{
 					OutNotes.Add(FString::Printf(TEXT("%s %s does not fit"), *SpaceLabel(Space), *PropName));
 					continue;
@@ -948,41 +1144,41 @@ namespace
 					EmitPose(Space, Grid, Chairs[ChairIndex], Prop.Kind, ChairIndex + 1, OutObjects);
 					++OutPlaced;
 				}
+				if (bReduced)
+				{
+					OutNotes.Add(FString::Printf(TEXT("%s %s placed with reduced clearance"), *SpaceLabel(Space), *PropName));
+				}
 				continue;
 			}
 
 			FGridPose Pose;
 			bool bPlaced = false;
-			switch (Prop.Anchor)
+			bool bReduced = false;
+			for (int32 Pass = 0; Pass < 2 && !bPlaced; ++Pass)
+			{
+				Grid.bRelaxedClearance = Pass == 1;
+				switch (Prop.Anchor)
 			{
 			case EPropAnchor::Wall:
 			{
-				float AlongCm = 0.f;
-				float IntoCm = 0.f;
-				WallFootprint(Prop.Kind, AlongCm, IntoCm);
 				const TArray<EPlanWall> Order = WallOrder(Grid, PreferredPrimaryWall(Grid));
-				bPlaced = PlaceOnWalls(Grid, Order, CellsForCm(AlongCm), CellsForCm(IntoCm), AlongCm, IntoCm, 1, false, Pose);
+				bPlaced = PlaceKindOnWalls(Grid, Prop.Kind, Order, 1, false, Pose);
 				break;
 			}
 			case EPropAnchor::Beside:
 			{
-				float AlongCm = 0.f;
-				float IntoCm = 0.f;
-				WallFootprint(Prop.Kind, AlongCm, IntoCm);
 				const int32 EndAlong = (ChainPose.Wall == EPlanWall::North || ChainPose.Wall == EPlanWall::South)
 					? ChainPose.MinX + ChainPose.SizeX
 					: ChainPose.MinY + ChainPose.SizeY;
 				const TArray<EPlanWall> Order = WallOrder(Grid, ChainPose.Wall);
-				bPlaced = PlaceOnWalls(Grid, Order, CellsForCm(AlongCm), CellsForCm(IntoCm), AlongCm, IntoCm, EndAlong, true, Pose);
+				bPlaced = PlaceKindOnWalls(Grid, Prop.Kind, Order, EndAlong, true, Pose);
 				break;
 			}
 			case EPropAnchor::InFront:
 			{
-				float WidthCm = 0.f;
-				float DepthCm = 0.f;
-				MeasureKind(Prop.Kind, WidthCm, DepthCm);
-				const float ParallelCm = FMath::Max(WidthCm, DepthCm);
-				const float AwayCm = FMath::Min(WidthCm, DepthCm);
+				float ParallelCm = 0.f;
+				float AwayCm = 0.f;
+				SizeFromWallDistance(Grid, Prop.Kind, PrimaryPose.Wall, ParallelCm, AwayCm);
 				bPlaced = PlaceInFront(Grid, PrimaryPose, CellsForCm(ParallelCm), CellsForCm(AwayCm), ParallelCm, AwayCm, Pose);
 				break;
 			}
@@ -990,8 +1186,8 @@ namespace
 			{
 				float AlongCm = 0.f;
 				float IntoCm = 0.f;
-				WallFootprint(Prop.Kind, AlongCm, IntoCm);
 				const EPlanWall Wall = OppositeWall(PrimaryPose.Wall);
+				SizeFromWallDistance(Grid, Prop.Kind, Wall, AlongCm, IntoCm);
 				const int32 AnchorCenter = (PrimaryPose.Wall == EPlanWall::North || PrimaryPose.Wall == EPlanWall::South)
 					? PrimaryPose.MinX + PrimaryPose.SizeX / 2
 					: PrimaryPose.MinY + PrimaryPose.SizeY / 2;
@@ -1003,16 +1199,15 @@ namespace
 			{
 				float WidthCm = 0.f;
 				float DepthCm = 0.f;
-				MeasureKind(Prop.Kind, WidthCm, DepthCm);
-				const float Cm = FMath::Max(WidthCm, DepthCm);
-				bPlaced = PlaceCorner(Grid, CellsForCm(Cm), Cm, Pose);
+				FootprintFromWallDistance(Grid, Prop.Kind, WidthCm, DepthCm);
+				bPlaced = PlaceCorner(Grid, CellsForCm(WidthCm), WidthCm, Pose);
 				break;
 			}
 			case EPropAnchor::Center:
 			{
 				float WidthCm = 0.f;
 				float DepthCm = 0.f;
-				MeasureKind(Prop.Kind, WidthCm, DepthCm);
+				FootprintFromWallDistance(Grid, Prop.Kind, WidthCm, DepthCm);
 				bPlaced = FindCentered(Grid, CellsForCm(WidthCm), CellsForCm(DepthCm), 0.f, WidthCm, DepthCm, Pose);
 				break;
 			}
@@ -1020,13 +1215,13 @@ namespace
 			{
 				float WidthCm = 0.f;
 				float DepthCm = 0.f;
-				MeasureKind(Prop.Kind, WidthCm, DepthCm);
+				FootprintFromWallDistance(Grid, Prop.Kind, WidthCm, DepthCm);
 				const float LongCm = FMath::Max(WidthCm, DepthCm);
 				const float ShortCm = FMath::Min(WidthCm, DepthCm);
 				const bool bAlongY = Grid.CellsY >= Grid.CellsX;
 				if (bAlongY)
 				{
-					bPlaced = FindCentered(Grid, CellsForCm(ShortCm), CellsForCm(LongCm), -90.f, LongCm, ShortCm, Pose);
+					bPlaced = FindCentered(Grid, CellsForCm(ShortCm), CellsForCm(LongCm), 90.f, LongCm, ShortCm, Pose);
 				}
 				else
 				{
@@ -1037,6 +1232,12 @@ namespace
 			default:
 				break;
 			}
+				if (bPlaced && Pass == 1)
+				{
+					bReduced = true;
+				}
+			}
+			Grid.bRelaxedClearance = false;
 
 			if (!bPlaced)
 			{
@@ -1047,6 +1248,10 @@ namespace
 			Grid.Occupy(Pose);
 			EmitPose(Space, Grid, Pose, Prop.Kind, 0, OutObjects);
 			++OutPlaced;
+			if (bReduced)
+			{
+				OutNotes.Add(FString::Printf(TEXT("%s %s placed with reduced clearance"), *SpaceLabel(Space), *PropName));
+			}
 			if (bIsPrimary)
 			{
 				bPrimaryPlaced = true;
@@ -1083,7 +1288,46 @@ namespace
 		OutDoor.OffsetCm = static_cast<float>(Offset * UnitScale);
 		OutDoor.WidthCm = static_cast<float>(Width * UnitScale);
 		OutDoor.SwingCm = bHasSwing ? static_cast<float>(Swing * UnitScale) : OutDoor.WidthCm;
+		OutDoor.SillCm = 0.f;
+		OutDoor.HeightCm = 210.f;
+		double Height = 0.0;
+		if (TryNumber(Object, TEXT("height"), Height) && Height > 0.0)
+		{
+			OutDoor.HeightCm = static_cast<float>(Height * UnitScale);
+		}
 		return OutDoor.SwingCm > 0.f;
+	}
+
+	bool ReadWindow(const TSharedPtr<FJsonObject>& Object, double UnitScale, FDoorSpec& OutWindow)
+	{
+		FString WallText;
+		if (!ReadStringField(Object, { TEXT("wall"), TEXT("side") }, WallText) || !ParseWall(WallText, OutWindow.Wall))
+		{
+			return false;
+		}
+		double Offset = 0.0;
+		double Width = 0.0;
+		double Depth = 40.0 / UnitScale;
+		TryNumber(Object, TEXT("offset"), Offset) || TryNumber(Object, TEXT("along"), Offset) || TryNumber(Object, TEXT("start"), Offset);
+		if (!TryNumber(Object, TEXT("width"), Width) && !TryNumber(Object, TEXT("span"), Width))
+		{
+			return false;
+		}
+		TryNumber(Object, TEXT("depth"), Depth) || TryNumber(Object, TEXT("clearance"), Depth);
+		if (Width <= 0.0 || Depth <= 0.0)
+		{
+			return false;
+		}
+		OutWindow.OffsetCm = static_cast<float>(Offset * UnitScale);
+		OutWindow.WidthCm = static_cast<float>(Width * UnitScale);
+		OutWindow.SwingCm = static_cast<float>(Depth * UnitScale);
+		double Sill = 0.0;
+		double Height = 0.0;
+		const bool bHasSill = TryNumber(Object, TEXT("sill"), Sill) || TryNumber(Object, TEXT("bottom"), Sill) || TryNumber(Object, TEXT("z"), Sill);
+		const bool bHasHeight = TryNumber(Object, TEXT("height"), Height);
+		OutWindow.SillCm = bHasSill && Sill >= 0.0 ? static_cast<float>(Sill * UnitScale) : 90.f;
+		OutWindow.HeightCm = bHasHeight && Height > 0.0 ? static_cast<float>(Height * UnitScale) : 120.f;
+		return true;
 	}
 
 	bool ReadSpace(const TSharedPtr<FJsonObject>& Object, double UnitScale, bool bForceHall, int32 Index, FSpaceSpec& OutSpace, FString& OutError)
@@ -1144,6 +1388,15 @@ namespace
 		OutSpace.SizeX = SizeX * static_cast<float>(UnitScale);
 		OutSpace.SizeY = SizeY * static_cast<float>(UnitScale);
 
+		float TotalX = 0.f;
+		float TotalY = 0.f;
+		if (ReadVector2(FindField(Object, { TEXT("totalSize") }), TotalX, TotalY) && TotalX > 1.f && TotalY > 1.f)
+		{
+			OutSpace.TotalSizeX = TotalX * static_cast<float>(UnitScale);
+			OutSpace.TotalSizeY = TotalY * static_cast<float>(UnitScale);
+			OutSpace.bHasTotalSize = true;
+		}
+
 		if (TSharedPtr<FJsonValue> DoorsValue = FindField(Object, { TEXT("doors"), TEXT("openings") }))
 		{
 			TArray<TSharedPtr<FJsonValue>> DoorValues;
@@ -1165,6 +1418,30 @@ namespace
 				if (ReadDoor(DoorValue->AsObject(), UnitScale, Door))
 				{
 					OutSpace.Doors.Add(Door);
+				}
+			}
+		}
+		if (TSharedPtr<FJsonValue> WindowsValue = FindField(Object, { TEXT("windows") }))
+		{
+			TArray<TSharedPtr<FJsonValue>> WindowValues;
+			if (WindowsValue->Type == EJson::Array)
+			{
+				WindowValues = WindowsValue->AsArray();
+			}
+			else if (WindowsValue->Type == EJson::Object)
+			{
+				WindowValues.Add(WindowsValue);
+			}
+			for (const TSharedPtr<FJsonValue>& WindowValue : WindowValues)
+			{
+				if (!WindowValue.IsValid() || WindowValue->Type != EJson::Object)
+				{
+					continue;
+				}
+				FDoorSpec Window;
+				if (ReadWindow(WindowValue->AsObject(), UnitScale, Window))
+				{
+					OutSpace.Windows.Add(Window);
 				}
 			}
 		}
@@ -1199,22 +1476,22 @@ namespace
 
 	FString BuildExportJson(const TArray<FExportedObject>& Objects, const TArray<FString>& Notes)
 	{
-		TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-		Root->SetStringField(TEXT("units"), TEXT("cm"));
-		Root->SetStringField(TEXT("source"), TEXT("compute"));
+		(void)Notes;
 
 		TArray<TSharedPtr<FJsonValue>> Items;
+		Items.Reserve(Objects.Num());
 		for (const FExportedObject& Object : Objects)
 		{
 			TSharedRef<FJsonObject> Item = MakeShared<FJsonObject>();
-			Item->SetStringField(TEXT("id"), Object.Id);
 			Item->SetStringField(TEXT("type"), Object.Category);
+			Item->SetStringField(TEXT("id"), Object.Id);
 			Item->SetStringField(TEXT("label"), Object.Label);
+			Item->SetStringField(TEXT("source"), TEXT("compute"));
 
 			TArray<TSharedPtr<FJsonValue>> Position;
 			Position.Add(MakeShared<FJsonValueNumber>(static_cast<double>(Object.X)));
 			Position.Add(MakeShared<FJsonValueNumber>(static_cast<double>(Object.Y)));
-			Position.Add(MakeShared<FJsonValueNumber>(0.0));
+			Position.Add(MakeShared<FJsonValueNumber>(static_cast<double>(Object.Z)));
 			Item->SetArrayField(TEXT("position"), Position);
 
 			TSharedRef<FJsonObject> Rotation = MakeShared<FJsonObject>();
@@ -1230,20 +1507,172 @@ namespace
 			Item->SetArrayField(TEXT("size"), Size);
 			Items.Add(MakeShared<FJsonValueObject>(Item));
 		}
-		Root->SetArrayField(TEXT("objects"), Items);
-
-		TArray<TSharedPtr<FJsonValue>> NoteValues;
-		for (const FString& Note : Notes)
-		{
-			NoteValues.Add(MakeShared<FJsonValueString>(Note));
-		}
-		Root->SetArrayField(TEXT("notes"), NoteValues);
 
 		FString Out;
 		TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> Writer = TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&Out);
-		FJsonSerializer::Serialize(Root, Writer);
+		FJsonSerializer::Serialize(Items, Writer);
 		return Out;
 	}
+
+	void WriteNumberPair(const TSharedPtr<FJsonObject>& Object, const TCHAR* Name, float A, float B)
+	{
+		TArray<TSharedPtr<FJsonValue>> Values;
+		Values.Add(MakeShared<FJsonValueNumber>(static_cast<double>(A)));
+		Values.Add(MakeShared<FJsonValueNumber>(static_cast<double>(B)));
+		Object->SetArrayField(Name, Values);
+	}
+
+	float RoundRoomMeasure(float Value)
+	{
+		return FMath::RoundToFloat(Value * 100.f) / 100.f;
+	}
+
+	bool MeasureSpaceObject(const TSharedPtr<FJsonObject>& Object, const FString& Units, FString& OutNote)
+	{
+		float SizeX = 0.f;
+		float SizeY = 0.f;
+		if (!ReadVector2(FindField(Object, { TEXT("size"), TEXT("dimensions"), TEXT("extent") }), SizeX, SizeY) || SizeX <= 1.f || SizeY <= 1.f)
+		{
+			return false;
+		}
+
+		float SwingWest = 0.f;
+		float SwingEast = 0.f;
+		float SwingNorth = 0.f;
+		float SwingSouth = 0.f;
+		if (TSharedPtr<FJsonValue> DoorsValue = FindField(Object, { TEXT("doors"), TEXT("openings") }))
+		{
+			TArray<TSharedPtr<FJsonValue>> DoorValues;
+			if (DoorsValue->Type == EJson::Array)
+			{
+				DoorValues = DoorsValue->AsArray();
+			}
+			else if (DoorsValue->Type == EJson::Object)
+			{
+				DoorValues.Add(DoorsValue);
+			}
+			for (const TSharedPtr<FJsonValue>& DoorValue : DoorValues)
+			{
+				if (!DoorValue.IsValid() || DoorValue->Type != EJson::Object)
+				{
+					continue;
+				}
+				const TSharedPtr<FJsonObject> Door = DoorValue->AsObject();
+				FString WallText;
+				EPlanWall Wall = EPlanWall::North;
+				if (!ReadStringField(Door, { TEXT("wall"), TEXT("side") }, WallText) || !ParseWall(WallText, Wall))
+				{
+					continue;
+				}
+				double Width = 0.0;
+				double Swing = 0.0;
+				if (!TryNumber(Door, TEXT("width"), Width) && !TryNumber(Door, TEXT("span"), Width))
+				{
+					continue;
+				}
+				const bool bHasSwing = TryNumber(Door, TEXT("swing"), Swing) || TryNumber(Door, TEXT("swingDepth"), Swing) || TryNumber(Door, TEXT("sway"), Swing);
+				const float SwingRadius = static_cast<float>(bHasSwing && Swing > 0.0 ? Swing : Width);
+				switch (Wall)
+				{
+				case EPlanWall::West: SwingWest = FMath::Max(SwingWest, SwingRadius); break;
+				case EPlanWall::East: SwingEast = FMath::Max(SwingEast, SwingRadius); break;
+				case EPlanWall::North: SwingNorth = FMath::Max(SwingNorth, SwingRadius); break;
+				case EPlanWall::South: SwingSouth = FMath::Max(SwingSouth, SwingRadius); break;
+				default: break;
+				}
+			}
+		}
+
+		const float SwingX = SwingWest + SwingEast;
+		const float SwingY = SwingNorth + SwingSouth;
+		const float TotalX = FMath::Max(SizeX - SwingX, SizeX * 0.25f);
+		const float TotalY = FMath::Max(SizeY - SwingY, SizeY * 0.25f);
+		WriteNumberPair(Object, TEXT("wallDistance"), RoundRoomMeasure(SizeX), RoundRoomMeasure(SizeY));
+		WriteNumberPair(Object, TEXT("swingRadius"), RoundRoomMeasure(SwingX), RoundRoomMeasure(SwingY));
+		WriteNumberPair(Object, TEXT("totalSize"), RoundRoomMeasure(TotalX), RoundRoomMeasure(TotalY));
+
+		FString Name;
+		ReadStringField(Object, { TEXT("name"), TEXT("room"), TEXT("label"), TEXT("category") }, Name);
+		OutNote = FString::Printf(
+			TEXT("%s wall %g x %g %s, swing %g x %g, total %g x %g"),
+			*Name,
+			RoundRoomMeasure(SizeX),
+			RoundRoomMeasure(SizeY),
+			*Units,
+			RoundRoomMeasure(SwingX),
+			RoundRoomMeasure(SwingY),
+			RoundRoomMeasure(TotalX),
+			RoundRoomMeasure(TotalY));
+		return true;
+	}
+
+	void MeasureSpaceArray(const TSharedPtr<FJsonValue>& Value, const FString& Units, TArray<FString>& Notes)
+	{
+		if (!Value.IsValid() || Value->Type != EJson::Array)
+		{
+			return;
+		}
+		for (const TSharedPtr<FJsonValue>& Entry : Value->AsArray())
+		{
+			if (!Entry.IsValid() || Entry->Type != EJson::Object)
+			{
+				continue;
+			}
+			FString Note;
+			if (MeasureSpaceObject(Entry->AsObject(), Units, Note))
+			{
+				Notes.Add(Note);
+			}
+		}
+	}
+}
+
+FFloorplanRoomSizeResult PrepareFloorplanRoomSizes(const FString& JsonText)
+{
+	FFloorplanRoomSizeResult Result;
+	TSharedPtr<FJsonValue> Root;
+	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
+	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid() || Root->Type != EJson::Object)
+	{
+		return Result;
+	}
+
+	const TSharedPtr<FJsonObject> RootObject = Root->AsObject();
+	const TSharedPtr<FJsonValue> RoomsValue = FindField(RootObject, { TEXT("rooms") });
+	const TSharedPtr<FJsonValue> HallsValue = FindField(RootObject, { TEXT("halls") });
+	const TSharedPtr<FJsonValue> SpacesValue = FindField(RootObject, { TEXT("spaces") });
+	if (!RoomsValue.IsValid() && !HallsValue.IsValid() && !SpacesValue.IsValid())
+	{
+		return Result;
+	}
+
+	Result.bIsFloorplan = true;
+	FString Units = TEXT("cm");
+	if (TSharedPtr<FJsonValue> UnitsValue = FindField(RootObject, { TEXT("units") }))
+	{
+		if (UnitsValue->Type == EJson::String && !UnitsValue->AsString().IsEmpty())
+		{
+			Units = UnitsValue->AsString();
+		}
+	}
+
+	TArray<FString> Notes;
+	MeasureSpaceArray(RoomsValue, Units, Notes);
+	MeasureSpaceArray(HallsValue, Units, Notes);
+	MeasureSpaceArray(SpacesValue, Units, Notes);
+	if (Notes.Num() == 0)
+	{
+		Result.Message = TEXT("The floorplan has rooms, but none had a wall size to measure.");
+		Result.JsonText = JsonText;
+		return Result;
+	}
+
+	FString Out;
+	TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> Writer = TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&Out);
+	FJsonSerializer::Serialize(RootObject.ToSharedRef(), Writer);
+	Result.JsonText = Out;
+	Result.Message = FString::Printf(TEXT("Measured %d rooms from wall distance and swing. %s."), Notes.Num(), *FString::Join(Notes, TEXT("; ")));
+	return Result;
 }
 
 FFurnitureComputeResult ComputeFurnitureAssembly(const FString& JsonText)
@@ -1277,6 +1706,23 @@ FFurnitureComputeResult ComputeFurnitureAssembly(const FString& JsonText)
 		}
 	}
 	const double UnitScale = UnitToCentimeters(Units);
+	float PlanOriginX = 0.f;
+	float PlanOriginY = 0.f;
+	float PlanOriginZ = 0.f;
+	if (TSharedPtr<FJsonValue> OriginValue = FindField(RootObject, { TEXT("origin") }))
+	{
+		float OriginX = 0.f;
+		float OriginY = 0.f;
+		if (ReadVector2(OriginValue, OriginX, OriginY))
+		{
+			PlanOriginX = OriginX * static_cast<float>(UnitScale);
+			PlanOriginY = OriginY * static_cast<float>(UnitScale);
+			if (OriginValue->Type == EJson::Array && OriginValue->AsArray().Num() > 2 && OriginValue->AsArray()[2].IsValid())
+			{
+				PlanOriginZ = static_cast<float>(OriginValue->AsArray()[2]->AsNumber() * UnitScale);
+			}
+		}
+	}
 
 	TArray<FString> Notes;
 	TArray<FSpaceSpec> Spaces;
@@ -1309,7 +1755,7 @@ FFurnitureComputeResult ComputeFurnitureAssembly(const FString& JsonText)
 
 		FRoomGrid Grid;
 		FString GridError;
-		if (!BuildGrid(Space, Grid, GridError))
+		if (!BuildGrid(Space, PlanOriginX, PlanOriginY, PlanOriginZ, Grid, GridError))
 		{
 			Notes.Add(GridError);
 			continue;
@@ -1326,7 +1772,7 @@ FFurnitureComputeResult ComputeFurnitureAssembly(const FString& JsonText)
 		PlaceSpace(Space, Grid, Objects, Notes, Placed);
 	}
 
-	Result.Message = FString::Printf(TEXT("Read %d rooms and %d halls. Placed %d objects."), RoomCount, HallCount, Placed);
+	Result.Message = FString::Printf(TEXT("No object data. 10 cm cubes mark walls, door swings, and windows. Props use the ground cubes in category order. Read %d rooms and %d halls. Placed %d objects."), RoomCount, HallCount, Placed);
 	if (Notes.Num() > 0)
 	{
 		Result.Message += FString::Printf(TEXT(" Skipped: %s."), *FString::Join(Notes, TEXT("; ")));

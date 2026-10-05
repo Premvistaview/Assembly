@@ -236,6 +236,15 @@ FFurnitureJsonImportResult ImportFurnitureDetectionJson(const FString& JsonText)
 	}
 
 	const double CentimetersPerUnit = UnitToCentimeters(ReadUnits(Root));
+	bool bFromCompute = false;
+	if (Root->Type == EJson::Object)
+	{
+		FString Source;
+		if (Root->AsObject()->TryGetStringField(TEXT("source"), Source) && Source.Equals(TEXT("compute"), ESearchCase::IgnoreCase))
+		{
+			bFromCompute = true;
+		}
+	}
 	int32 MissingFields = 0;
 
 	for (int32 Index = 0; Index < Objects->Num(); ++Index)
@@ -298,11 +307,22 @@ FFurnitureJsonImportResult ImportFurnitureDetectionJson(const FString& JsonText)
 		Detected.Id = FName(*Id);
 		Detected.Category = Category;
 		Detected.Label = Label.IsEmpty() ? Category : Label;
+		FString ObjectSource;
+		bool bObjectFromCompute = bFromCompute;
+		if (Object->TryGetStringField(TEXT("source"), ObjectSource) && ObjectSource.Equals(TEXT("compute"), ESearchCase::IgnoreCase))
+		{
+			bObjectFromCompute = true;
+		}
+
 		Detected.Location = Location * CentimetersPerUnit;
 		Detected.Rotation = Rotation;
 		Detected.Scale = Scale;
 		Detected.Size = Size * CentimetersPerUnit;
-		Detected.Location.Y = -Detected.Location.Y;
+		Detected.bPlaceAtBoundsCenter = bObjectFromCompute;
+		if (!bObjectFromCompute)
+		{
+			Detected.Location.Y = -Detected.Location.Y;
+		}
 		Result.Objects.Add(Detected);
 	}
 

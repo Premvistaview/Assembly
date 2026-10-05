@@ -34,7 +34,8 @@ enum class EFurnitureKind : uint8
 	CoffeeTable UMETA(DisplayName = "Coffee Table"),
 	Television UMETA(DisplayName = "Television"),
 	Plant UMETA(DisplayName = "Plant"),
-	Car UMETA(DisplayName = "Car")
+	Car UMETA(DisplayName = "Car"),
+	BedLamp UMETA(DisplayName = "Bed Lamp")
 };
 
 /**
@@ -126,9 +127,13 @@ struct ASSEMBLY_API FDetectedFurnitureObject
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Furniture")
 	FVector Scale = FVector::OneVector;
 
-	/** Detected footprint in centimeters. Zero means the JSON did not include a size. */
+	/** Maximum footprint in centimeters. Placement fits the mesh inside it with one scale. Zero means the JSON did not include a size. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Furniture")
 	FVector Size = FVector::ZeroVector;
+
+	/** When set, Location is the footprint center and the mesh pivot is shifted from the mesh bounds origin. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Furniture")
+	bool bPlaceAtBoundsCenter = false;
 };
 
 inline const EFurnitureKind* AllFurnitureKinds(int32& OutCount)
@@ -149,7 +154,8 @@ inline const EFurnitureKind* AllFurnitureKinds(int32& OutCount)
 		EFurnitureKind::CoffeeTable,
 		EFurnitureKind::Television,
 		EFurnitureKind::Plant,
-		EFurnitureKind::Car
+		EFurnitureKind::Car,
+		EFurnitureKind::BedLamp
 	};
 	OutCount = UE_ARRAY_COUNT(Kinds);
 	return Kinds;
@@ -190,6 +196,7 @@ inline const TCHAR* FurnitureKindLabel(EFurnitureKind Kind)
 	case EFurnitureKind::Television: return TEXT("Television");
 	case EFurnitureKind::Plant: return TEXT("Plant");
 	case EFurnitureKind::Car: return TEXT("Car");
+	case EFurnitureKind::BedLamp: return TEXT("Bed Lamp");
 	default: return TEXT("Furniture");
 	}
 }
@@ -229,6 +236,7 @@ inline EFurnitureRoom FurnitureKindRoom(EFurnitureKind Kind)
 	switch (Kind)
 	{
 	case EFurnitureKind::Bed:
+	case EFurnitureKind::BedLamp:
 	case EFurnitureKind::Wardrobe:
 		return EFurnitureRoom::Bedroom;
 	case EFurnitureKind::Toilet:
@@ -264,6 +272,7 @@ inline void FurnitureKindDefaultSize(EFurnitureKind Kind, float& OutWidthFeet, f
 	switch (Kind)
 	{
 	case EFurnitureKind::Bed: OutWidthFeet = 6.3f; OutDepthFeet = 5.4f; OutYawDegrees = -90.f; break;
+	case EFurnitureKind::BedLamp: OutWidthFeet = 1.2f; OutDepthFeet = 1.2f; OutYawDegrees = -90.f; break;
 	case EFurnitureKind::Wardrobe: OutWidthFeet = 4.6f; OutDepthFeet = 1.4f; OutYawDegrees = 90.f; break;
 	case EFurnitureKind::Toilet: OutWidthFeet = 1.6f; OutDepthFeet = 2.4f; OutYawDegrees = -90.f; break;
 	case EFurnitureKind::WashBasin: OutWidthFeet = 1.6f; OutDepthFeet = 1.4f; OutYawDegrees = -90.f; break;
@@ -279,5 +288,36 @@ inline void FurnitureKindDefaultSize(EFurnitureKind Kind, float& OutWidthFeet, f
 	case EFurnitureKind::Plant: OutWidthFeet = 1.3f; OutDepthFeet = 1.3f; OutYawDegrees = 0.f; break;
 	case EFurnitureKind::Car: OutWidthFeet = 5.8f; OutDepthFeet = 12.f; OutYawDegrees = -90.f; break;
 	default: break;
+	}
+}
+
+/** UE mannequin standing height. Furniture is scaled against this before it is placed. */
+inline float MannequinHeightCm()
+{
+	return 180.f;
+}
+
+/** Real height for this kind, in centimeters, compared with the 180 cm mannequin. */
+inline float FurnitureKindHeightCm(EFurnitureKind Kind)
+{
+	switch (Kind)
+	{
+	case EFurnitureKind::Bed: return 70.f;
+	case EFurnitureKind::BedLamp: return 45.f;
+	case EFurnitureKind::Wardrobe: return 200.f;
+	case EFurnitureKind::Toilet: return 80.f;
+	case EFurnitureKind::WashBasin: return 85.f;
+	case EFurnitureKind::UtilitySink: return 90.f;
+	case EFurnitureKind::KitchenSink: return 90.f;
+	case EFurnitureKind::Stove: return 90.f;
+	case EFurnitureKind::Fridge: return 175.f;
+	case EFurnitureKind::DiningTable: return 75.f;
+	case EFurnitureKind::DiningChair: return 95.f;
+	case EFurnitureKind::Sofa: return 85.f;
+	case EFurnitureKind::CoffeeTable: return 42.f;
+	case EFurnitureKind::Television: return 80.f;
+	case EFurnitureKind::Plant: return 110.f;
+	case EFurnitureKind::Car: return 150.f;
+	default: return 90.f;
 	}
 }

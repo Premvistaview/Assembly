@@ -23,11 +23,14 @@
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/Input/SSegmentedControl.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
+#include "Widgets/Layout/SWidgetSwitcher.h"
 #include "Widgets/SNullWidget.h"
 #include "Widgets/Text/STextBlock.h"
+#include "Widgets/Views/SHeaderRow.h"
 
 namespace
 {
@@ -99,6 +102,11 @@ namespace
 		{
 			AddAlias(Aliases, TEXT("utilitysink"));
 		}
+		else if (Category.Equals(TEXT("Bed Lamp"), ESearchCase::IgnoreCase))
+		{
+			AddAlias(Aliases, TEXT("lamp"));
+			AddAlias(Aliases, TEXT("bedlamp"));
+		}
 
 		for (const FString& Alias : Aliases)
 		{
@@ -115,6 +123,73 @@ namespace
 			return;
 		}
 	}
+
+	class SPlacementOrderRow : public SMultiColumnTableRow<TSharedPtr<FImportedFurnitureItem>>
+	{
+	public:
+		SLATE_BEGIN_ARGS(SPlacementOrderRow) {}
+			SLATE_ARGUMENT(TSharedPtr<FImportedFurnitureItem>, Item)
+			SLATE_ARGUMENT(int32, Step)
+			SLATE_ARGUMENT(FString, MeshLabel)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& InArgs, const TSharedRef<STableViewBase>& OwnerTable)
+		{
+			Item = InArgs._Item;
+			Step = InArgs._Step;
+			MeshLabel = InArgs._MeshLabel;
+			FSuperRowType::Construct(FSuperRowType::FTableRowArgs(), OwnerTable);
+		}
+
+		virtual TSharedRef<SWidget> GenerateWidgetForColumn(const FName& Column) override
+		{
+			FString Text;
+			if (Column == FName(TEXT("Step")))
+			{
+				Text = FString::FromInt(Step);
+			}
+			else if (Column == FName(TEXT("Object")) && Item.IsValid())
+			{
+				Text = Item->Object.Label.IsEmpty() ? Item->Object.Category : Item->Object.Label;
+				const FString Id = Item->Object.Id.ToString();
+				if (!Id.IsEmpty() && !Id.Equals(Text, ESearchCase::IgnoreCase))
+				{
+					Text = FString::Printf(TEXT("%s  (%s)"), *Text, *Id);
+				}
+				if (!Item->Object.Category.IsEmpty() && !Item->Object.Category.Equals(Item->Object.Label, ESearchCase::IgnoreCase))
+				{
+					Text += FString::Printf(TEXT("  ·  %s"), *Item->Object.Category);
+				}
+			}
+			else if (Column == FName(TEXT("Mesh")))
+			{
+				Text = MeshLabel;
+			}
+			else if (Column == FName(TEXT("Location")) && Item.IsValid())
+			{
+				Text = FormatVector(Item->Object.Location);
+			}
+			else if (Column == FName(TEXT("Rotation")) && Item.IsValid())
+			{
+				Text = FormatRotator(Item->Object.Rotation);
+			}
+			else if (Column == FName(TEXT("Scale")) && Item.IsValid())
+			{
+				Text = FormatVector(Item->Object.Scale);
+			}
+
+			return SNew(SBox)
+				.Padding(FMargin(6.f, 2.f))
+				[
+					SNew(STextBlock).Text(FText::FromString(Text))
+				];
+		}
+
+	private:
+		TSharedPtr<FImportedFurnitureItem> Item;
+		int32 Step = 0;
+		FString MeshLabel;
+	};
 }
 
 void SFloorplanFurnitureWindow::Construct(const FArguments& InArgs)
@@ -152,7 +227,7 @@ void SFloorplanFurnitureWindow::Construct(const FArguments& InArgs)
 				[
 					SNew(STextBlock)
 					.AutoWrapText(true)
-					.Text(FText::FromString(TEXT("Import a JSON file. Object lists go straight to placement. A floorplan of rooms and halls is solved by Compute Assembly, then placed with the same category meshes. Assign one premodel mesh to each category.")))
+					.Text(FText::FromString(TEXT("Import a JSON file. Object lists go straight to placement. A floorplan of rooms and halls is solved by Compute Assembly, then placed with the same category meshes. Assign one premodel mesh to each category. Order of placement lists every mesh in the order it is spawned.")))
 				]
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 8.f)
@@ -171,50 +246,91 @@ void SFloorplanFurnitureWindow::Construct(const FArguments& InArgs)
 					[ SNew(STextBlock).Text(FText::FromString(TEXT("Place Objects"))) ]
 				]
 			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 8.f)
+			[
+				SNew(SSegmentedControl<int32>)
+				.Value(this, &SFloorplanFurnitureWindow::GetActiveTab)
+				.OnValueChanged(this, &SFloorplanFurnitureWindow::SetActiveTab)
+				+ SSegmentedControl<int32>::Slot(0)
+				.Text(FText::FromString(TEXT("Objects")))
+				+ SSegmentedControl<int32>::Slot(1)
+				.Text(FText::FromString(TEXT("Order of placement")))
+			]
 			+ SVerticalBox::Slot().FillHeight(1.f)
 			[
-				SNew(SScrollBox)
-				+ SScrollBox::Slot()
+				SNew(SWidgetSwitcher)
+				.WidgetIndex(this, &SFloorplanFurnitureWindow::GetActiveTab)
+				+ SWidgetSwitcher::Slot()
 				[
-					SNew(SVerticalBox)
-					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)
+					SNew(SScrollBox)
+					+ SScrollBox::Slot()
 					[
-						SNew(STextBlock)
-						.Text(FText::FromString(TEXT("Objects")))
-						.Font(FAppStyle::GetFontStyle("NormalFontBold"))
-					]
-					+ SVerticalBox::Slot().AutoHeight()
-					[
-						SNew(SBox).HeightOverride(280.f)
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)
 						[
-							SAssignNew(ListView, SListView<TSharedPtr<FImportedFurnitureItem>>)
-							.ListItemsSource(&Objects)
-							.SelectionMode(ESelectionMode::None)
-							.OnGenerateRow(this, &SFloorplanFurnitureWindow::OnGenerateRow)
+							SNew(STextBlock)
+							.Text(FText::FromString(TEXT("Objects")))
+							.Font(FAppStyle::GetFontStyle("NormalFontBold"))
+						]
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(SBox).HeightOverride(280.f)
+							[
+								SAssignNew(ListView, SListView<TSharedPtr<FImportedFurnitureItem>>)
+								.ListItemsSource(&Objects)
+								.SelectionMode(ESelectionMode::None)
+								.OnGenerateRow(this, &SFloorplanFurnitureWindow::OnGenerateRow)
+							]
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f)
+						[ SNew(SSeparator) ]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f)
+						[
+							SNew(STextBlock)
+							.Text(FText::FromString(TEXT("Mesh categories")))
+							.Font(FAppStyle::GetFontStyle("NormalFontBold"))
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 4.f)
+						[
+							SNew(STextBlock)
+							.AutoWrapText(true)
+							.Text(FText::FromString(TEXT("Every object in a category uses the same premodel mesh. Set the mesh once for Toilet, and every toilet in the JSON uses it.")))
+						]
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SAssignNew(CategoryList, SVerticalBox)
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f)
+						[
+							SAssignNew(PickerHost, SBox)
+							.Visibility(EVisibility::Collapsed)
 						]
 					]
-					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 8.f)
-					[ SNew(SSeparator) ]
-					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f)
-					[
-						SNew(STextBlock)
-						.Text(FText::FromString(TEXT("Mesh categories")))
-						.Font(FAppStyle::GetFontStyle("NormalFontBold"))
-					]
-					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 4.f)
+				]
+				+ SWidgetSwitcher::Slot()
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 6.f)
 					[
 						SNew(STextBlock)
 						.AutoWrapText(true)
-						.Text(FText::FromString(TEXT("Every object in a category uses the same premodel mesh. Set the mesh once for Toilet, and every toilet in the JSON uses it.")))
+						.Text(this, &SFloorplanFurnitureWindow::GetPlacementOrderSummary)
 					]
-					+ SVerticalBox::Slot().AutoHeight()
+					+ SVerticalBox::Slot().FillHeight(1.f)
 					[
-						SAssignNew(CategoryList, SVerticalBox)
-					]
-					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f)
-					[
-						SAssignNew(PickerHost, SBox)
-						.Visibility(EVisibility::Collapsed)
+						SAssignNew(OrderListView, SListView<TSharedPtr<FImportedFurnitureItem>>)
+						.ListItemsSource(&PlacementOrder)
+						.SelectionMode(ESelectionMode::None)
+						.OnGenerateRow(this, &SFloorplanFurnitureWindow::OnGenerateOrderRow)
+						.HeaderRow(
+							SNew(SHeaderRow)
+							+ SHeaderRow::Column(TEXT("Step")).DefaultLabel(FText::FromString(TEXT("#"))).FixedWidth(44.f)
+							+ SHeaderRow::Column(TEXT("Object")).DefaultLabel(FText::FromString(TEXT("Object"))).FillWidth(1.5f)
+							+ SHeaderRow::Column(TEXT("Mesh")).DefaultLabel(FText::FromString(TEXT("Mesh"))).FillWidth(1.2f)
+							+ SHeaderRow::Column(TEXT("Location")).DefaultLabel(FText::FromString(TEXT("Location"))).FillWidth(1.3f)
+							+ SHeaderRow::Column(TEXT("Rotation")).DefaultLabel(FText::FromString(TEXT("Rotation"))).FillWidth(1.1f)
+							+ SHeaderRow::Column(TEXT("Scale")).DefaultLabel(FText::FromString(TEXT("Scale"))).FillWidth(1.f)
+						)
 					]
 				]
 			]
@@ -259,6 +375,17 @@ TSharedRef<ITableRow> SFloorplanFurnitureWindow::OnGenerateRow(TSharedPtr<FImpor
 				SNew(STextBlock).Text(FText::FromString(Line))
 			]
 		];
+}
+
+TSharedRef<ITableRow> SFloorplanFurnitureWindow::OnGenerateOrderRow(TSharedPtr<FImportedFurnitureItem> Item, const TSharedRef<STableViewBase>& OwnerTable)
+{
+	const int32 Index = PlacementOrder.IndexOfByKey(Item);
+	const int32 Step = Index == INDEX_NONE ? 0 : Index + 1;
+	const FString Mesh = Item.IsValid() ? CategoryMeshLabel(Item->Object.Category) : FString();
+	return SNew(SPlacementOrderRow, OwnerTable)
+		.Item(Item)
+		.Step(Step)
+		.MeshLabel(Mesh);
 }
 
 FReply SFloorplanFurnitureWindow::ImportJsonClicked()
@@ -320,7 +447,8 @@ FReply SFloorplanFurnitureWindow::PlaceObjectsClicked()
 
 	TSet<FString> MissingMeshes;
 	int32 Placed = 0;
-	for (const TSharedPtr<FImportedFurnitureItem>& Item : Objects)
+	const TArray<TSharedPtr<FImportedFurnitureItem>>& SpawnOrder = PlacementOrder.Num() > 0 ? PlacementOrder : Objects;
+	for (const TSharedPtr<FImportedFurnitureItem>& Item : SpawnOrder)
 	{
 		if (!Item.IsValid())
 		{
@@ -468,6 +596,7 @@ void SFloorplanFurnitureWindow::ImportJsonFile(const FString& Path)
 		bJsonValid = false;
 		AssemblyPath = EAssemblyPath::None;
 		Objects.Reset();
+		PlacementOrder.Reset();
 		Categories.Reset();
 		JsonPath.Reset();
 		RefreshObjects();
@@ -480,7 +609,14 @@ void SFloorplanFurnitureWindow::ImportJsonFile(const FString& Path)
 	bool bComputePath = false;
 	if (!Imported.bIsDetectionData)
 	{
-		const FFurnitureComputeResult Computed = ComputeFurnitureAssembly(JsonText);
+		FString FloorplanText = JsonText;
+		const FFloorplanRoomSizeResult Sized = PrepareFloorplanRoomSizes(JsonText);
+		if (Sized.bIsFloorplan && !Sized.JsonText.IsEmpty())
+		{
+			FloorplanText = Sized.JsonText;
+			FFileHelper::SaveStringToFile(FloorplanText, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+		}
+		const FFurnitureComputeResult Computed = ComputeFurnitureAssembly(FloorplanText);
 		if (Computed.bIsFloorplan)
 		{
 			bComputePath = true;
@@ -491,9 +627,10 @@ void SFloorplanFurnitureWindow::ImportJsonFile(const FString& Path)
 				Imported = ImportFurnitureDetectionJson(Computed.ExportedJson);
 				if (Imported.bIsDetectionData)
 				{
+					const FString SizePrefix = Sized.bIsFloorplan && !Sized.Message.IsEmpty() ? Sized.Message + TEXT(" ") : FString();
 					Imported.Message = bSaved
-						? FString::Printf(TEXT("Compute Assembly. %s Saved %s."), *Computed.Message, *FPaths::GetCleanFilename(ExportPath))
-						: FString::Printf(TEXT("Compute Assembly. %s Could not write %s."), *Computed.Message, *FPaths::GetCleanFilename(ExportPath));
+						? FString::Printf(TEXT("%sConverted to object detection. %s Saved %s."), *SizePrefix, *Computed.Message, *FPaths::GetCleanFilename(ExportPath))
+						: FString::Printf(TEXT("%sConverted to object detection. %s Could not write %s."), *SizePrefix, *Computed.Message, *FPaths::GetCleanFilename(ExportPath));
 				}
 				else
 				{
@@ -508,6 +645,7 @@ void SFloorplanFurnitureWindow::ImportJsonFile(const FString& Path)
 	}
 
 	Objects.Reset();
+	PlacementOrder.Reset();
 	Categories.Reset();
 	JsonPath = Path;
 	bJsonValid = Imported.bIsDetectionData;
@@ -554,6 +692,7 @@ void SFloorplanFurnitureWindow::ImportJsonFile(const FString& Path)
 		}
 	}
 
+	PlacementOrder = Objects;
 	Objects.Sort([](const TSharedPtr<FImportedFurnitureItem>& A, const TSharedPtr<FImportedFurnitureItem>& B)
 	{
 		if (!A.IsValid() || !B.IsValid())
@@ -578,6 +717,10 @@ void SFloorplanFurnitureWindow::RefreshObjects()
 	if (ListView.IsValid())
 	{
 		ListView->RequestListRefresh();
+	}
+	if (OrderListView.IsValid())
+	{
+		OrderListView->RequestListRefresh();
 	}
 }
 
@@ -725,6 +868,27 @@ int32 SFloorplanFurnitureWindow::CountInCategory(const FString& Category) const
 FText SFloorplanFurnitureWindow::GetStatusText() const
 {
 	return Status;
+}
+
+FText SFloorplanFurnitureWindow::GetPlacementOrderSummary() const
+{
+	if (PlacementOrder.Num() == 0)
+	{
+		return FText::FromString(TEXT("Import JSON to see the order each mesh is placed."));
+	}
+	return FText::FromString(FString::Printf(
+		TEXT("%d meshes, in the order Place Objects spawns them. The number is the placement step."),
+		PlacementOrder.Num()));
+}
+
+int32 SFloorplanFurnitureWindow::GetActiveTab() const
+{
+	return ActiveTab;
+}
+
+void SFloorplanFurnitureWindow::SetActiveTab(int32 Tab)
+{
+	ActiveTab = Tab;
 }
 
 FText SFloorplanFurnitureWindow::GetAssemblyPathText() const

@@ -128,21 +128,52 @@ void AFurniturePlacementActor::ApplyDetectedObject(
 		FMath::IsNearlyZero(Object.Scale.Z) ? 1.f : Object.Scale.Z);
 
 	const FBoxSphereBounds Bounds = Mesh->GetBounds();
-	if (Object.Size.X > 1.f && Object.Size.Y > 1.f)
+	const float MeshX = FMath::Max(Bounds.BoxExtent.X * 2.f, 1.f);
+	const float MeshY = FMath::Max(Bounds.BoxExtent.Y * 2.f, 1.f);
+	const float MeshZ = FMath::Max(Bounds.BoxExtent.Z * 2.f, 1.f);
+
+	float Uniform = 1.f;
+	if (Object.bPlaceAtBoundsCenter)
 	{
-		const float MeshX = FMath::Max(Bounds.BoxExtent.X * 2.f, 1.f);
-		const float MeshY = FMath::Max(Bounds.BoxExtent.Y * 2.f, 1.f);
-		const float MeshZ = FMath::Max(Bounds.BoxExtent.Z * 2.f, 1.f);
-		const float FitX = Object.Size.X / MeshX;
-		const float FitY = Object.Size.Y / MeshY;
-		Scale.X *= FitX;
-		Scale.Y *= FitY;
-		Scale.Z *= Object.Size.Z > 1.f ? (Object.Size.Z / MeshZ) : FMath::Min(FitX, FitY);
+		const float TargetHeight = FurnitureKindHeightCm(Kind);
+		Uniform = TargetHeight / MeshZ;
+		if (Object.Size.X > 1.f && Object.Size.Y > 1.f)
+		{
+			const float FitX = Object.Size.X / (MeshX * Uniform);
+			const float FitY = Object.Size.Y / (MeshY * Uniform);
+			const float FloorFit = FMath::Min(FitX, FitY);
+			if (FloorFit < 1.f)
+			{
+				Uniform *= FloorFit;
+			}
+		}
+		const float MaxHeight = FMath::Max(TargetHeight, MannequinHeightCm() * 1.15f);
+		const float Height = MeshZ * Uniform;
+		if (Height > MaxHeight)
+		{
+			Uniform *= MaxHeight / Height;
+		}
 	}
+	else if (Object.Size.X > 1.f && Object.Size.Y > 1.f)
+	{
+		Uniform = FMath::Min(Object.Size.X / MeshX, Object.Size.Y / MeshY);
+		const float Height = MeshZ * Uniform;
+		const float MaxHeight = FMath::Max(FurnitureKindHeightCm(Kind), MannequinHeightCm() * 1.15f);
+		if (Height > MaxHeight)
+		{
+			Uniform *= MaxHeight / Height;
+		}
+	}
+	Scale *= Uniform;
 
 	const float BottomZ = (Bounds.Origin.Z - Bounds.BoxExtent.Z) * Scale.Z;
 	FVector Location = Object.Location;
 	Location.Z -= BottomZ;
+	if (Object.bPlaceAtBoundsCenter)
+	{
+		const FVector BoundsOrigin(Bounds.Origin.X * Scale.X, Bounds.Origin.Y * Scale.Y, 0.f);
+		Location -= Rotation.RotateVector(BoundsOrigin);
+	}
 
 	SetActorScale3D(Scale);
 	SetActorRotation(Rotation);

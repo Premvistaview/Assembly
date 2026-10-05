@@ -11,7 +11,7 @@ class UStaticMeshComponent;
 
 /**
  * One piece of furniture placed from a floor plan.
- * The mesh is scaled so its footprint matches the detected size, and it sits on Z = 0.
+ * A computed size is the maximum footprint. One scale fits the mesh inside it, so the mesh keeps its proportions, and it sits on Z = 0.
  */
 UCLASS(Blueprintable)
 class ASSEMBLY_API AFurniturePlacementActor : public AActor

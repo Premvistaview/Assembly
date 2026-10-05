@@ -18,4 +18,18 @@ struct FFurnitureComputeResult
 	FString ExportedJson;
 };
 
+/**
+ * Runs after import and before Compute Assembly.
+ * For each room, wall distance is the span between opposite walls.
+ * Swing radius is added from the doors on those walls.
+ * totalSize is wall distance minus that swing, and is written back onto the JSON.
+ */
+struct FFloorplanRoomSizeResult
+{
+	bool bIsFloorplan = false;
+	FString Message;
+	FString JsonText;
+};
+
+ASSEMBLY_API FFloorplanRoomSizeResult PrepareFloorplanRoomSizes(const FString& JsonText);
 ASSEMBLY_API FFurnitureComputeResult ComputeFurnitureAssembly(const FString& JsonText);

@@ -1,58 +1,320 @@
 {
-  "units": "cm",
-  "rooms": [
-    {
-      "name": "Bedroom",
-      "origin": [0, 0],
-      "size": [480, 450],
-      "doors": [{ "wall": "south", "offset": 180, "width": 90 }]
-    },
-    {
-      "name": "Toilet",
-      "origin": [480, 0],
-      "size": [240, 240],
-      "doors": [{ "wall": "south", "offset": 70, "width": 80 }]
-    },
-    {
-      "name": "Utility",
-      "origin": [720, 0],
-      "size": [220, 240],
-      "doors": [{ "wall": "south", "offset": 60, "width": 80 }]
-    },
-    {
-      "name": "Kitchen",
-      "origin": [480, 240],
-      "size": [460, 210],
-      "doors": [{ "wall": "south", "offset": 40, "width": 90 }]
-    },
-    {
-      "name": "Living",
-      "origin": [0, 600],
-      "size": [500, 500],
-      "doors": [{ "wall": "north", "offset": 180, "width": 90 }]
-    },
-    {
-      "name": "Dining",
-      "origin": [500, 600],
-      "size": [440, 400],
-      "doors": [{ "wall": "north", "offset": 160, "width": 90 }]
-    },
-    {
-      "name": "Parking",
-      "origin": [500, 1000],
-      "size": [440, 720],
-      "doors": [{ "wall": "north", "offset": 100, "width": 240 }]
-    }
-  ],
-  "halls": [
-    {
-      "name": "Hall",
-      "origin": [0, 450],
-      "size": [940, 150],
-      "doors": [
-        { "wall": "north", "offset": 180, "width": 90 },
-        { "wall": "south", "offset": 180, "width": 90 }
-      ]
-    }
-  ]
+	"units": "ft",
+	"origin": [
+		0,
+		0,
+		0
+	],
+	"rooms": [
+		{
+			"name": "Bedroom",
+			"origin": [
+				0,
+				0
+			],
+			"size": [
+				11,
+				11
+			],
+			"doors": [
+				{
+					"wall": "east",
+					"offset": 7.5,
+					"width": 2.5,
+					"swing": 0.5
+				}
+			],
+			"windows": [
+				{
+					"wall": "north",
+					"offset": 5,
+					"width": 4,
+					"depth": 1,
+					"sill": 3,
+					"height": 4
+				}
+			],
+			"wallDistance": [
+				11,
+				11
+			],
+			"swingRadius": [
+				0.5,
+				0
+			],
+			"totalSize": [
+				10.5,
+				11
+			]
+		},
+		{
+			"name": "Toilet",
+			"origin": [
+				11,
+				0
+			],
+			"size": [
+				8,
+				4.5
+			],
+			"doors": [
+				{
+					"wall": "south",
+					"offset": 3.5,
+					"width": 2.5,
+					"swing": 2.5
+				}
+			],
+			"wallDistance": [
+				8,
+				4.5
+			],
+			"swingRadius": [
+				0,
+				2.5
+			],
+			"totalSize": [
+				8,
+				2
+			]
+		},
+		{
+			"name": "Utility",
+			"origin": [
+				20,
+				0
+			],
+			"size": [
+				7,
+				3.5
+			],
+			"doors": [
+				{
+					"wall": "west",
+					"offset": 0.5,
+					"width": 2.5,
+					"swing": 2.5
+				}
+			],
+			"wallDistance": [
+				7,
+				3.5
+			],
+			"swingRadius": [
+				2.5,
+				0
+			],
+			"totalSize": [
+				4.5,
+				3.5
+			]
+		},
+		{
+			"name": "Kitchen",
+			"origin": [
+				20,
+				3.5
+			],
+			"size": [
+				7,
+				8
+			],
+			"doors": [
+				{
+					"wall": "west",
+					"offset": 2,
+					"width": 2.5,
+					"swing": 0.5
+				}
+			],
+			"windows": [
+				{
+					"wall": "north",
+					"offset": 3,
+					"width": 3,
+					"depth": 1,
+					"sill": 3,
+					"height": 4
+				}
+			],
+			"wallDistance": [
+				7,
+				8
+			],
+			"swingRadius": [
+				0.5,
+				0
+			],
+			"totalSize": [
+				6.5,
+				8
+			]
+		},
+		{
+			"name": "Dining",
+			"origin": [
+				11,
+				4.5
+			],
+			"size": [
+				9,
+				8
+			],
+			"doors": [
+				{
+					"wall": "west",
+					"offset": 3,
+					"width": 2.5,
+					"swing": 2.5
+				},
+				{
+					"wall": "north",
+					"offset": 3.5,
+					"width": 2.5,
+					"swing": 1
+				},
+				{
+					"wall": "east",
+					"offset": 1,
+					"width": 2.5,
+					"swing": 2.5
+				},
+				{
+					"wall": "south",
+					"offset": 2,
+					"width": 4,
+					"swing": 1
+				}
+			],
+			"wallDistance": [
+				9,
+				8
+			],
+			"swingRadius": [
+				5,
+				2
+			],
+			"totalSize": [
+				4,
+				6
+			]
+		},
+		{
+			"name": "Parking",
+			"origin": [
+				0,
+				12.5
+			],
+			"size": [
+				10,
+				15
+			],
+			"doors": [
+				{
+					"wall": "south",
+					"offset": 1,
+					"width": 8,
+					"swing": 1
+				}
+			],
+			"wallDistance": [
+				10,
+				15
+			],
+			"swingRadius": [
+				0,
+				1
+			],
+			"totalSize": [
+				10,
+				14
+			]
+		},
+		{
+			"name": "Living",
+			"origin": [
+				10,
+				12.5
+			],
+			"size": [
+				13,
+				11
+			],
+			"doors": [
+				{
+					"wall": "south",
+					"offset": 1,
+					"width": 3,
+					"swing": 3
+				},
+				{
+					"wall": "north",
+					"offset": 3,
+					"width": 4,
+					"swing": 1
+				}
+			],
+			"windows": [
+				{
+					"wall": "east",
+					"offset": 3,
+					"width": 4,
+					"depth": 1,
+					"sill": 3,
+					"height": 4
+				}
+			],
+			"wallDistance": [
+				13,
+				11
+			],
+			"swingRadius": [
+				0,
+				4
+			],
+			"totalSize": [
+				13,
+				7
+			]
+		}
+	],
+	"halls": [
+		{
+			"name": "Entry",
+			"origin": [
+				10,
+				23.5
+			],
+			"size": [
+				4.5,
+				4
+			],
+			"doors": [
+				{
+					"wall": "north",
+					"offset": 1,
+					"width": 3,
+					"swing": 0.5
+				},
+				{
+					"wall": "south",
+					"offset": 1,
+					"width": 3,
+					"swing": 1
+				}
+			],
+			"wallDistance": [
+				4.5,
+				4
+			],
+			"swingRadius": [
+				0,
+				1.5
+			],
+			"totalSize": [
+				4.5,
+				2.5
+			]
+		}
+	]
 }

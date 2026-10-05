@@ -1,385 +1,420 @@
-{
-	"units": "cm",
-	"source": "compute",
-	"objects": [
+[
+	{
+		"type": "Bed",
+		"id": "Bed_1",
+		"label": "Bed",
+		"source": "compute",
+		"position": [
+			95,
+			120,
+			0
+		],
+		"rotation":
 		{
-			"id": "Bed_1",
-			"type": "Bed",
-			"label": "Bed",
-			"position": [
-				110,
-				95,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": -90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				164.59199523925781,
-				192.02400207519531
-			]
+			"pitch": 0,
+			"yaw": 0,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			166.42079162597656,
+			217.93199157714844
+		]
+	},
+	{
+		"type": "Bed Lamp",
+		"id": "BedLamp_1",
+		"label": "Bed Lamp",
+		"source": "compute",
+		"position": [
+			35,
+			265,
+			0
+		],
+		"rotation":
 		{
-			"id": "Wardrobe_1",
-			"type": "Wardrobe",
-			"label": "Wardrobe",
-			"position": [
-				295,
-				35,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": -90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				42.6719970703125,
-				140.20799255371094
-			]
+			"pitch": 0,
+			"yaw": 0,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			44.80560302734375,
+			46.939201354980469
+		]
+	},
+	{
+		"type": "Wardrobe",
+		"id": "Wardrobe_1",
+		"label": "Wardrobe",
+		"source": "compute",
+		"position": [
+			260,
+			50,
+			0
+		],
+		"rotation":
 		{
-			"id": "Toilet_2",
-			"type": "Toilet",
-			"label": "Toilet",
-			"position": [
-				515,
-				50,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": -90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				73.152000427246094,
-				48.768001556396484
-			]
+			"pitch": 0,
+			"yaw": 90,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			73.7615966796875,
+			134.41679382324219
+		]
+	},
+	{
+		"type": "Toilet",
+		"id": "Toilet_2",
+		"label": "Toilet",
+		"source": "compute",
+		"position": [
+			395.27999877929688,
+			30,
+			0
+		],
+		"rotation":
 		{
-			"id": "WashBasin_2",
-			"type": "Wash Basin",
-			"label": "Wash Basin",
-			"position": [
-				575,
-				35,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": -90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				42.6719970703125,
-				48.768001556396484
-			]
+			"pitch": 0,
+			"yaw": 90,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			33.527999877929688,
+			92.659194946289062
+		]
+	},
+	{
+		"type": "Wash Basin",
+		"id": "WashBasin_2",
+		"label": "Wash Basin",
+		"source": "compute",
+		"position": [
+			495.27999877929688,
+			25,
+			0
+		],
+		"rotation":
 		{
-			"id": "UtilitySink_3",
-			"type": "Utility Sink",
-			"label": "Utility Sink",
-			"position": [
-				755,
-				45,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": -90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				67.055999755859375,
-				48.768001556396484
-			]
+			"pitch": 0,
+			"yaw": 90,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			20.726400375366211,
+			73.152000427246094
+		]
+	},
+	{
+		"type": "Utility Sink",
+		"id": "UtilitySink_3",
+		"label": "Utility Sink",
+		"source": "compute",
+		"position": [
+			784.5999755859375,
+			35,
+			0
+		],
+		"rotation":
 		{
-			"id": "Stove_4",
-			"type": "Stove",
-			"label": "Stove",
-			"position": [
-				515,
-				285,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": -90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				67.055999755859375,
-				48.768001556396484
-			]
+			"pitch": 0,
+			"yaw": 180,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			61.722000122070312,
+			44.805599212646484
+		]
+	},
+	{
+		"type": "Stove",
+		"id": "Stove_4",
+		"label": "Stove",
+		"source": "compute",
+		"position": [
+			784.5999755859375,
+			156.67999267578125,
+			0
+		],
+		"rotation":
 		{
-			"id": "KitchenSink_4",
-			"type": "Kitchen Sink",
-			"label": "Kitchen Sink",
-			"position": [
-				595,
-				275,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": -90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				48.768001556396484,
-				85.343994140625
-			]
+			"pitch": 0,
+			"yaw": 180,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			63.398395538330078,
+			78.028793334960938
+		]
+	},
+	{
+		"type": "Kitchen Sink",
+		"id": "KitchenSink_4",
+		"label": "Kitchen Sink",
+		"source": "compute",
+		"position": [
+			789.5999755859375,
+			261.67999267578125,
+			0
+		],
+		"rotation":
 		{
-			"id": "Fridge_4",
-			"type": "Fridge",
-			"label": "Fridge",
-			"position": [
-				685,
-				285,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": -90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				67.055999755859375,
-				67.055999755859375
-			]
+			"pitch": 0,
+			"yaw": 180,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			55.473598480224609,
+			102.41279602050781
+		]
+	},
+	{
+		"type": "Fridge",
+		"id": "Fridge_4",
+		"label": "Fridge",
+		"source": "compute",
+		"position": [
+			669.5999755859375,
+			156.67999267578125,
+			0
+		],
+		"rotation":
 		{
-			"id": "Sofa_5",
-			"type": "Sofa",
-			"label": "Sofa",
-			"position": [
-				120,
-				1005,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": 90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				167.63999938964844,
-				219.45599365234375
-			]
+			"pitch": 0,
+			"yaw": 90,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			78.028793334960938,
+			59.436000823974609
+		]
+	},
+	{
+		"type": "Dining Table",
+		"id": "DiningTable_5",
+		"label": "Dining Table",
+		"source": "compute",
+		"position": [
+			475.27999877929688,
+			257.16000366210938,
+			0
+		],
+		"rotation":
 		{
-			"id": "CoffeeTable_5",
-			"type": "Coffee Table",
-			"label": "Coffee Table",
-			"position": [
-				290,
-				885,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": 0,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				97.536003112792969,
-				60.959999084472656
-			]
+			"pitch": 0,
+			"yaw": 0,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			75.590400695800781,
+			91.44000244140625
+		]
+	},
+	{
+		"type": "Dining Chair",
+		"id": "DiningChair_5_1",
+		"label": "Dining Chair",
+		"source": "compute",
+		"position": [
+			410.27999877929688,
+			192.16000366210938,
+			0
+		],
+		"rotation":
 		{
-			"id": "Television_5",
-			"type": "Television",
-			"label": "Television",
-			"position": [
-				120,
-				625,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": -90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				24.384000778198242,
-				115.82399749755859
-			]
+			"pitch": 0,
+			"yaw": 90,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			26.822399139404297,
+			26.822399139404297
+		]
+	},
+	{
+		"type": "Dining Chair",
+		"id": "DiningChair_5_2",
+		"label": "Dining Chair",
+		"source": "compute",
+		"position": [
+			540.280029296875,
+			262.16000366210938,
+			0
+		],
+		"rotation":
 		{
-			"id": "Plant_5",
-			"type": "Plant",
-			"label": "Plant",
-			"position": [
-				30,
-				630,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": 0,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				39.623996734619141,
-				39.623996734619141
-			]
+			"pitch": 0,
+			"yaw": 180,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			26.822399139404297,
+			26.822399139404297
+		]
+	},
+	{
+		"type": "Dining Chair",
+		"id": "DiningChair_5_3",
+		"label": "Dining Chair",
+		"source": "compute",
+		"position": [
+			540.280029296875,
+			322.16000366210938,
+			0
+		],
+		"rotation":
 		{
-			"id": "DiningTable_6",
-			"type": "Dining Table",
-			"label": "Dining Table",
-			"position": [
-				725,
-				805,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": 0,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				128.0159912109375,
-				85.343994140625
-			]
+			"pitch": 0,
+			"yaw": -90,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			26.822399139404297,
+			26.822399139404297
+		]
+	},
+	{
+		"type": "Dining Chair",
+		"id": "DiningChair_5_4",
+		"label": "Dining Chair",
+		"source": "compute",
+		"position": [
+			410.27999877929688,
+			322.16000366210938,
+			0
+		],
+		"rotation":
 		{
-			"id": "DiningChair_6_1",
-			"type": "Dining Chair",
-			"label": "Dining Chair",
-			"position": [
-				825,
-				735,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": -90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				45.720001220703125,
-				45.720001220703125
-			]
+			"pitch": 0,
+			"yaw": 0,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			26.822399139404297,
+			26.822399139404297
+		]
+	},
+	{
+		"type": "Car",
+		"id": "Car_6",
+		"label": "Car",
+		"source": "compute",
+		"position": [
+			155,
+			596,
+			0
+		],
+		"rotation":
 		{
-			"id": "DiningChair_6_2",
-			"type": "Dining Chair",
-			"label": "Dining Chair",
-			"position": [
-				815,
-				885,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": 180,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				45.720001220703125,
-				45.720001220703125
-			]
+			"pitch": 0,
+			"yaw": 90,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			384.04800415039062,
+			262.12799072265625
+		]
+	},
+	{
+		"type": "Sofa",
+		"id": "Sofa_7",
+		"label": "Sofa",
+		"source": "compute",
+		"position": [
+			609.79998779296875,
+			446,
+			0
+		],
+		"rotation":
 		{
-			"id": "DiningChair_6_3",
-			"type": "Dining Chair",
-			"label": "Dining Chair",
-			"position": [
-				625,
-				875,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": 90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				45.720001220703125,
-				45.720001220703125
-			]
+			"pitch": 0,
+			"yaw": 90,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			102.41279602050781,
+			170
+		]
+	},
+	{
+		"type": "Coffee Table",
+		"id": "CoffeeTable_7",
+		"label": "Coffee Table",
+		"source": "compute",
+		"position": [
+			474.79998779296875,
+			531,
+			0
+		],
+		"rotation":
 		{
-			"id": "DiningChair_6_4",
-			"type": "Dining Chair",
-			"label": "Dining Chair",
-			"position": [
-				635,
-				725,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": 0,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				45.720001220703125,
-				45.720001220703125
-			]
+			"pitch": 0,
+			"yaw": 0,
+			"roll": 0
 		},
+		"scale": 1,
+		"size": [
+			80,
+			59.740798950195312
+		]
+	},
+	{
+		"type": "Television",
+		"id": "Television_7",
+		"label": "Television",
+		"source": "compute",
+		"position": [
+			604.79998779296875,
+			696,
+			0
+		],
+		"rotation":
 		{
-			"id": "Car_7",
-			"type": "Car",
-			"label": "Car",
-			"position": [
-				720,
-				1435,
-				0
-			],
-			"rotation":
-			{
-				"pitch": 0,
-				"yaw": -90,
-				"roll": 0
-			},
-			"scale": 1,
-			"size": [
-				365.760009765625,
-				176.78399658203125
-			]
-		}
-	],
-	"notes": []
-}
+			"pitch": 0,
+			"yaw": -90,
+			"roll": 0
+		},
+		"scale": 1,
+		"size": [
+			29.870399475097656,
+			150.57119750976562
+		]
+	},
+	{
+		"type": "Plant",
+		"id": "Plant_7",
+		"label": "Plant",
+		"source": "compute",
+		"position": [
+			334.79998779296875,
+			411,
+			0
+		],
+		"rotation":
+		{
+			"pitch": 0,
+			"yaw": 0,
+			"roll": 0
+		},
+		"scale": 1,
+		"size": [
+			34.137599945068359,
+			34.137599945068359
+		]
+	}
+]

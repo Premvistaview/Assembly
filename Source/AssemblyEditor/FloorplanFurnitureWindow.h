@@ -29,6 +29,7 @@ public:
 private:
 
 	TSharedRef<ITableRow> OnGenerateRow(TSharedPtr<FImportedFurnitureItem> Item, const TSharedRef<STableViewBase>& OwnerTable);
+	TSharedRef<ITableRow> OnGenerateOrderRow(TSharedPtr<FImportedFurnitureItem> Item, const TSharedRef<STableViewBase>& OwnerTable);
 
 	FReply ImportJsonClicked();
 	FReply PlaceObjectsClicked();
@@ -46,7 +47,11 @@ private:
 	int32 CountInCategory(const FString& Category) const;
 	FText GetStatusText() const;
 	FText GetAssemblyPathText() const;
+	FText GetPlacementOrderSummary() const;
 	bool CanPlace() const;
+
+	int32 GetActiveTab() const;
+	void SetActiveTab(int32 Tab);
 
 	enum class EAssemblyPath : uint8
 	{
@@ -63,9 +68,14 @@ private:
 	FString PickerCategory;
 
 	TArray<TSharedPtr<FImportedFurnitureItem>> Objects;
+	/** Import order. Place Objects spawns meshes in this sequence. */
+	TArray<TSharedPtr<FImportedFurnitureItem>> PlacementOrder;
 	TArray<FString> Categories;
 
+	int32 ActiveTab = 0;
+
 	TSharedPtr<SListView<TSharedPtr<FImportedFurnitureItem>>> ListView;
+	TSharedPtr<SListView<TSharedPtr<FImportedFurnitureItem>>> OrderListView;
 	TSharedPtr<SVerticalBox> CategoryList;
 	TSharedPtr<SBox> PickerHost;
 };
