@@ -16,7 +16,7 @@ struct FImportedFurnitureItem
 	FDetectedFurnitureObject Object;
 };
 
-/** Imports detection JSON, assigns one premodel mesh per category, and places the objects. */
+/** Imports detection JSON, or computes a floorplan into that same list, then places one mesh per category. */
 class SFloorplanFurnitureWindow : public SCompoundWidget
 {
 public:
@@ -45,11 +45,20 @@ private:
 	FString CategoryMeshLabel(const FString& Category) const;
 	int32 CountInCategory(const FString& Category) const;
 	FText GetStatusText() const;
+	FText GetAssemblyPathText() const;
 	bool CanPlace() const;
+
+	enum class EAssemblyPath : uint8
+	{
+		None,
+		Place,
+		Compute
+	};
 
 	TStrongObjectPtr<UFurnitureCatalog> Catalog;
 	FString JsonPath;
 	FText Status;
+	EAssemblyPath AssemblyPath = EAssemblyPath::None;
 	bool bJsonValid = false;
 	FString PickerCategory;
 

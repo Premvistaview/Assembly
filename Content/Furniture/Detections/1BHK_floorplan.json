@@ -1,0 +1,58 @@
+{
+  "units": "cm",
+  "rooms": [
+    {
+      "name": "Bedroom",
+      "origin": [0, 0],
+      "size": [480, 450],
+      "doors": [{ "wall": "south", "offset": 180, "width": 90 }]
+    },
+    {
+      "name": "Toilet",
+      "origin": [480, 0],
+      "size": [240, 240],
+      "doors": [{ "wall": "south", "offset": 70, "width": 80 }]
+    },
+    {
+      "name": "Utility",
+      "origin": [720, 0],
+      "size": [220, 240],
+      "doors": [{ "wall": "south", "offset": 60, "width": 80 }]
+    },
+    {
+      "name": "Kitchen",
+      "origin": [480, 240],
+      "size": [460, 210],
+      "doors": [{ "wall": "south", "offset": 40, "width": 90 }]
+    },
+    {
+      "name": "Living",
+      "origin": [0, 600],
+      "size": [500, 500],
+      "doors": [{ "wall": "north", "offset": 180, "width": 90 }]
+    },
+    {
+      "name": "Dining",
+      "origin": [500, 600],
+      "size": [440, 400],
+      "doors": [{ "wall": "north", "offset": 160, "width": 90 }]
+    },
+    {
+      "name": "Parking",
+      "origin": [500, 1000],
+      "size": [440, 720],
+      "doors": [{ "wall": "north", "offset": 100, "width": 240 }]
+    }
+  ],
+  "halls": [
+    {
+      "name": "Hall",
+      "origin": [0, 450],
+      "size": [940, 150],
+      "doors": [
+        { "wall": "north", "offset": 180, "width": 90 },
+        { "wall": "south", "offset": 180, "width": 90 }
+      ]
+    }
+  ]
+}

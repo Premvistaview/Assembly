@@ -29,7 +29,7 @@
 			"id": "kitchen_sink",
 			"category": "Kitchen Sink",
 			"label": "Kitchen Sink",
-			"location": [308.2, 266.5, 50],
+			"location": [328.2, 266.5, 50],
 			"rotation": [0, 90, 0],
 			"scale": [1, 1, 1]
 		},

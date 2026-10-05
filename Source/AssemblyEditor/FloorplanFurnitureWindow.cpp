@@ -1,5 +1,6 @@
 #include "FloorplanFurnitureWindow.h"
 
+#include "Furniture/FurnitureComputeAssembly.h"
 #include "Furniture/FurniturePlacementActor.h"
 
 #include "AssetRegistry/AssetData.h"
@@ -54,6 +55,66 @@ namespace
 	{
 		return FString::Printf(TEXT("P %.0f  Y %.0f  R %.0f"), Value.Pitch, Value.Yaw, Value.Roll);
 	}
+
+	void AddAlias(TArray<FString>& Aliases, const TCHAR* Name)
+	{
+		Aliases.Add(Name);
+	}
+
+	/** Copies a mesh from a detection name such as "tv" onto the catalog category Compute Assembly uses. */
+	void AdoptAliasMesh(UFurnitureCatalog* Catalog, const FString& Category)
+	{
+		if (Catalog == nullptr || Catalog->GetNamedCategoryMesh(Category) != nullptr)
+		{
+			return;
+		}
+
+		TArray<FString> Aliases;
+		if (Category.Equals(TEXT("Television"), ESearchCase::IgnoreCase))
+		{
+			AddAlias(Aliases, TEXT("tv"));
+		}
+		else if (Category.Equals(TEXT("Dining Table"), ESearchCase::IgnoreCase))
+		{
+			AddAlias(Aliases, TEXT("table"));
+		}
+		else if (Category.Equals(TEXT("Dining Chair"), ESearchCase::IgnoreCase))
+		{
+			AddAlias(Aliases, TEXT("chair"));
+		}
+		else if (Category.Equals(TEXT("Wash Basin"), ESearchCase::IgnoreCase))
+		{
+			AddAlias(Aliases, TEXT("basin"));
+			AddAlias(Aliases, TEXT("washbasin"));
+		}
+		else if (Category.Equals(TEXT("Coffee Table"), ESearchCase::IgnoreCase))
+		{
+			AddAlias(Aliases, TEXT("coffee"));
+		}
+		else if (Category.Equals(TEXT("Kitchen Sink"), ESearchCase::IgnoreCase))
+		{
+			AddAlias(Aliases, TEXT("kitchensink"));
+		}
+		else if (Category.Equals(TEXT("Utility Sink"), ESearchCase::IgnoreCase))
+		{
+			AddAlias(Aliases, TEXT("utilitysink"));
+		}
+
+		for (const FString& Alias : Aliases)
+		{
+			const FFurnitureMeshOption* Option = Catalog->GetNamedCategoryMesh(Alias);
+			if (Option == nullptr)
+			{
+				continue;
+			}
+			Catalog->SetNamedCategoryMesh(Category, Option->DisplayName, Option->Mesh.ToSoftObjectPath());
+			if (FFurnitureNamedCategory* Entry = Catalog->FindNamedCategory(Category))
+			{
+				Entry->Mesh.YawOffsetDegrees = Option->YawOffsetDegrees;
+			}
+			return;
+		}
+	}
 }
 
 void SFloorplanFurnitureWindow::Construct(const FArguments& InArgs)
@@ -72,15 +133,26 @@ void SFloorplanFurnitureWindow::Construct(const FArguments& InArgs)
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()
 				[
-					SNew(STextBlock)
-					.Text(FText::FromString(TEXT("Furniture placement")))
-					.Font(FAppStyle::GetFontStyle("NormalFontBold"))
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+					[
+						SNew(STextBlock)
+						.Text(FText::FromString(TEXT("Furniture placement")))
+						.Font(FAppStyle::GetFontStyle("NormalFontBold"))
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).HAlign(HAlign_Right)
+					[
+						SNew(STextBlock)
+						.Text(this, &SFloorplanFurnitureWindow::GetAssemblyPathText)
+						.Font(FAppStyle::GetFontStyle("NormalFontBold"))
+						.Justification(ETextJustify::Right)
+					]
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 2.f, 0.f, 0.f)
 				[
 					SNew(STextBlock)
 					.AutoWrapText(true)
-					.Text(FText::FromString(TEXT("Import a JSON file of detected objects. Each object must include a category, location, rotation, and scale. Assign one premodel mesh to each category, then place the objects. Detection and placement are not edited by hand.")))
+					.Text(FText::FromString(TEXT("Import a JSON file. Object lists go straight to placement. A floorplan of rooms and halls is solved by Compute Assembly, then placed with the same category meshes. Assign one premodel mesh to each category.")))
 				]
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 8.f)
@@ -108,7 +180,7 @@ void SFloorplanFurnitureWindow::Construct(const FArguments& InArgs)
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)
 					[
 						SNew(STextBlock)
-						.Text(FText::FromString(TEXT("Detected objects")))
+						.Text(FText::FromString(TEXT("Objects")))
 						.Font(FAppStyle::GetFontStyle("NormalFontBold"))
 					]
 					+ SVerticalBox::Slot().AutoHeight()
@@ -155,7 +227,7 @@ void SFloorplanFurnitureWindow::Construct(const FArguments& InArgs)
 		]
 	];
 
-	SetStatus(TEXT("Import a JSON file. The file is accepted only when it contains object detection data."));
+	SetStatus(TEXT("Import a JSON file of detected objects, or a floorplan of rooms and halls."));
 	RebuildCategories();
 }
 
@@ -202,10 +274,10 @@ FReply SFloorplanFurnitureWindow::ImportJsonClicked()
 	const FString DefaultPath = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Furniture/Detections"));
 	const bool bOpened = Desktop->OpenFileDialog(
 		Parent,
-		TEXT("Import Detection JSON"),
+		TEXT("Import Furniture JSON"),
 		DefaultPath,
 		TEXT(""),
-		TEXT("Detection JSON|*.json"),
+		TEXT("Furniture JSON|*.json"),
 		0,
 		Files);
 	if (bOpened && Files.Num() > 0)
@@ -394,6 +466,7 @@ void SFloorplanFurnitureWindow::ImportJsonFile(const FString& Path)
 	if (!FFileHelper::LoadFileToString(JsonText, *Path))
 	{
 		bJsonValid = false;
+		AssemblyPath = EAssemblyPath::None;
 		Objects.Reset();
 		Categories.Reset();
 		JsonPath.Reset();
@@ -403,11 +476,42 @@ void SFloorplanFurnitureWindow::ImportJsonFile(const FString& Path)
 		return;
 	}
 
-	const FFurnitureJsonImportResult Imported = ImportFurnitureDetectionJson(JsonText);
+	FFurnitureJsonImportResult Imported = ImportFurnitureDetectionJson(JsonText);
+	bool bComputePath = false;
+	if (!Imported.bIsDetectionData)
+	{
+		const FFurnitureComputeResult Computed = ComputeFurnitureAssembly(JsonText);
+		if (Computed.bIsFloorplan)
+		{
+			bComputePath = true;
+			if (!Computed.ExportedJson.IsEmpty())
+			{
+				const FString ExportPath = FPaths::Combine(FPaths::GetPath(Path), FPaths::GetBaseFilename(Path) + TEXT(".computed.json"));
+				const bool bSaved = FFileHelper::SaveStringToFile(Computed.ExportedJson, *ExportPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+				Imported = ImportFurnitureDetectionJson(Computed.ExportedJson);
+				if (Imported.bIsDetectionData)
+				{
+					Imported.Message = bSaved
+						? FString::Printf(TEXT("Compute Assembly. %s Saved %s."), *Computed.Message, *FPaths::GetCleanFilename(ExportPath))
+						: FString::Printf(TEXT("Compute Assembly. %s Could not write %s."), *Computed.Message, *FPaths::GetCleanFilename(ExportPath));
+				}
+				else
+				{
+					Imported.Message = FString::Printf(TEXT("Compute Assembly built a placement list, but it could not be read back. %s"), *Imported.Message);
+				}
+			}
+			else
+			{
+				Imported.Message = FString::Printf(TEXT("Compute Assembly. %s"), *Computed.Message);
+			}
+		}
+	}
+
 	Objects.Reset();
 	Categories.Reset();
 	JsonPath = Path;
 	bJsonValid = Imported.bIsDetectionData;
+	AssemblyPath = !bJsonValid ? (bComputePath ? EAssemblyPath::Compute : EAssemblyPath::None) : (bComputePath ? EAssemblyPath::Compute : EAssemblyPath::Place);
 
 	if (!Imported.bIsDetectionData)
 	{
@@ -421,12 +525,24 @@ void SFloorplanFurnitureWindow::ImportJsonFile(const FString& Path)
 	{
 		TSharedPtr<FImportedFurnitureItem> Item = MakeShared<FImportedFurnitureItem>();
 		Item->Object = Object;
+		if (Catalog.IsValid())
+		{
+			if (const FFurnitureNamedCategory* Existing = Catalog->FindNamedCategory(Item->Object.Category))
+			{
+				Item->Object.Category = Existing->Name;
+			}
+			else
+			{
+				Catalog->EnsureNamedCategory(Item->Object.Category);
+				AdoptAliasMesh(Catalog.Get(), Item->Object.Category);
+			}
+		}
 		Objects.Add(Item);
 
 		bool bFound = false;
 		for (const FString& Category : Categories)
 		{
-			if (Category.Equals(Object.Category, ESearchCase::IgnoreCase))
+			if (Category.Equals(Item->Object.Category, ESearchCase::IgnoreCase))
 			{
 				bFound = true;
 				break;
@@ -434,11 +550,7 @@ void SFloorplanFurnitureWindow::ImportJsonFile(const FString& Path)
 		}
 		if (!bFound)
 		{
-			Categories.Add(Object.Category);
-			if (Catalog.IsValid())
-			{
-				Catalog->EnsureNamedCategory(Object.Category);
-			}
+			Categories.Add(Item->Object.Category);
 		}
 	}
 
@@ -613,6 +725,19 @@ int32 SFloorplanFurnitureWindow::CountInCategory(const FString& Category) const
 FText SFloorplanFurnitureWindow::GetStatusText() const
 {
 	return Status;
+}
+
+FText SFloorplanFurnitureWindow::GetAssemblyPathText() const
+{
+	switch (AssemblyPath)
+	{
+	case EAssemblyPath::Place:
+		return FText::FromString(TEXT("Place Assembly"));
+	case EAssemblyPath::Compute:
+		return FText::FromString(TEXT("Compute Assembly"));
+	default:
+		return FText::GetEmpty();
+	}
 }
 
 bool SFloorplanFurnitureWindow::CanPlace() const

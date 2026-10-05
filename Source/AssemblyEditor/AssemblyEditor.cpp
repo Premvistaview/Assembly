@@ -32,7 +32,7 @@ void FAssemblyEditorModule::RegisterMenus()
 	Section.AddMenuEntry(
 		"OpenFloorplanFurniture",
 		LOCTEXT("OpenFloorplanFurniture", "Furniture Placement"),
-		LOCTEXT("OpenFloorplanFurnitureTip", "Import detection JSON, assign one premodel mesh per category, and place the objects."),
+		LOCTEXT("OpenFloorplanFurnitureTip", "Import detection JSON or a room floorplan, assign one mesh per category, and place the objects."),
 		FSlateIcon(),
 		FUIAction(FExecuteAction::CreateRaw(this, &FAssemblyEditorModule::OpenFurnitureWindow)));
 }
