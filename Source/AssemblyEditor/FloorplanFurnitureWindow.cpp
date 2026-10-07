@@ -1,6 +1,6 @@
 #include "FloorplanFurnitureWindow.h"
 
-#include "Furniture/FurnitureComputeAssembly.h"
+#include "Furniture/FurnitureAssemblyLoad.h"
 #include "Furniture/FurniturePlacementActor.h"
 
 #include "AssetRegistry/AssetData.h"
@@ -13,13 +13,10 @@
 #include "HAL/FileManager.h"
 #include "IContentBrowserSingleton.h"
 #include "IDesktopPlatform.h"
-#include "Materials/MaterialInterface.h"
-#include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "ScopedTransaction.h"
 #include "Styling/AppStyle.h"
 #include "Framework/Application/SlateApplication.h"
-#include "Subsystems/EditorActorSubsystem.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "Widgets/Input/SButton.h"
@@ -34,21 +31,6 @@
 
 namespace
 {
-	UStaticMesh* LoadPlaceholderMesh()
-	{
-		UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/LevelPrototyping/Meshes/SM_Cube.SM_Cube"));
-		if (Mesh == nullptr)
-		{
-			Mesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
-		}
-		return Mesh;
-	}
-
-	UMaterialInterface* LoadPlaceholderMaterial()
-	{
-		return LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/LevelPrototyping/Materials/MI_PrototypeGrid_Gray.MI_PrototypeGrid_Gray"));
-	}
-
 	FString FormatVector(const FVector& Value)
 	{
 		return FString::Printf(TEXT("%.1f, %.1f, %.1f"), Value.X, Value.Y, Value.Z);
@@ -57,71 +39,6 @@ namespace
 	FString FormatRotator(const FRotator& Value)
 	{
 		return FString::Printf(TEXT("P %.0f  Y %.0f  R %.0f"), Value.Pitch, Value.Yaw, Value.Roll);
-	}
-
-	void AddAlias(TArray<FString>& Aliases, const TCHAR* Name)
-	{
-		Aliases.Add(Name);
-	}
-
-	/** Copies a mesh from a detection name such as "tv" onto the catalog category Compute Assembly uses. */
-	void AdoptAliasMesh(UFurnitureCatalog* Catalog, const FString& Category)
-	{
-		if (Catalog == nullptr || Catalog->GetNamedCategoryMesh(Category) != nullptr)
-		{
-			return;
-		}
-
-		TArray<FString> Aliases;
-		if (Category.Equals(TEXT("Television"), ESearchCase::IgnoreCase))
-		{
-			AddAlias(Aliases, TEXT("tv"));
-		}
-		else if (Category.Equals(TEXT("Dining Table"), ESearchCase::IgnoreCase))
-		{
-			AddAlias(Aliases, TEXT("table"));
-		}
-		else if (Category.Equals(TEXT("Dining Chair"), ESearchCase::IgnoreCase))
-		{
-			AddAlias(Aliases, TEXT("chair"));
-		}
-		else if (Category.Equals(TEXT("Wash Basin"), ESearchCase::IgnoreCase))
-		{
-			AddAlias(Aliases, TEXT("basin"));
-			AddAlias(Aliases, TEXT("washbasin"));
-		}
-		else if (Category.Equals(TEXT("Coffee Table"), ESearchCase::IgnoreCase))
-		{
-			AddAlias(Aliases, TEXT("coffee"));
-		}
-		else if (Category.Equals(TEXT("Kitchen Sink"), ESearchCase::IgnoreCase))
-		{
-			AddAlias(Aliases, TEXT("kitchensink"));
-		}
-		else if (Category.Equals(TEXT("Utility Sink"), ESearchCase::IgnoreCase))
-		{
-			AddAlias(Aliases, TEXT("utilitysink"));
-		}
-		else if (Category.Equals(TEXT("Bed Lamp"), ESearchCase::IgnoreCase))
-		{
-			AddAlias(Aliases, TEXT("lamp"));
-			AddAlias(Aliases, TEXT("bedlamp"));
-		}
-
-		for (const FString& Alias : Aliases)
-		{
-			const FFurnitureMeshOption* Option = Catalog->GetNamedCategoryMesh(Alias);
-			if (Option == nullptr)
-			{
-				continue;
-			}
-			Catalog->SetNamedCategoryMesh(Category, Option->DisplayName, Option->Mesh.ToSoftObjectPath());
-			if (FFurnitureNamedCategory* Entry = Catalog->FindNamedCategory(Category))
-			{
-				Entry->Mesh.YawOffsetDegrees = Option->YawOffsetDegrees;
-			}
-			return;
-		}
 	}
 
 	class SPlacementOrderRow : public SMultiColumnTableRow<TSharedPtr<FImportedFurnitureItem>>
@@ -433,106 +350,38 @@ FReply SFloorplanFurnitureWindow::PlaceObjectsClicked()
 	}
 
 	UWorld* World = GEditor->GetEditorWorldContext().World();
-	UEditorActorSubsystem* Actors = GEditor->GetEditorSubsystem<UEditorActorSubsystem>();
-	if (World == nullptr || Actors == nullptr)
+	if (World == nullptr)
 	{
 		SetStatus(TEXT("Open a level before placing objects."));
 		return FReply::Handled();
 	}
 
-	UStaticMesh* PlaceholderMesh = LoadPlaceholderMesh();
-	UMaterialInterface* PlaceholderMaterial = LoadPlaceholderMaterial();
-	FScopedTransaction Transaction(NSLOCTEXT("FurniturePlacement", "PlaceObjects", "Place Detected Furniture"));
-	GEditor->SelectNone(false, true, false);
-
-	TSet<FString> MissingMeshes;
-	int32 Placed = 0;
+	TArray<FDetectedFurnitureObject> SpawnObjects;
 	const TArray<TSharedPtr<FImportedFurnitureItem>>& SpawnOrder = PlacementOrder.Num() > 0 ? PlacementOrder : Objects;
+	SpawnObjects.Reserve(SpawnOrder.Num());
+	TSet<FName> PlacedIds;
 	for (const TSharedPtr<FImportedFurnitureItem>& Item : SpawnOrder)
 	{
-		if (!Item.IsValid())
+		if (Item.IsValid())
 		{
-			continue;
+			SpawnObjects.Add(Item->Object);
+			PlacedIds.Add(Item->Object.Id);
 		}
-
-		UStaticMesh* Mesh = nullptr;
-		float YawOffset = 0.f;
-		bool bPlaceholder = true;
-		if (Catalog.IsValid())
-		{
-			if (const FFurnitureMeshOption* Option = Catalog->GetNamedCategoryMesh(Item->Object.Category))
-			{
-				Mesh = LoadObject<UStaticMesh>(nullptr, *Option->Mesh.ToSoftObjectPath().ToString());
-				if (Mesh != nullptr)
-				{
-					bPlaceholder = false;
-					YawOffset = Option->YawOffsetDegrees;
-				}
-			}
-		}
-		if (Mesh == nullptr)
-		{
-			Mesh = PlaceholderMesh;
-			bPlaceholder = true;
-			MissingMeshes.Add(Item->Object.Category);
-		}
-		if (Mesh == nullptr)
-		{
-			continue;
-		}
-
-		AFurniturePlacementActor* Existing = nullptr;
-		for (TActorIterator<AFurniturePlacementActor> It(World); It; ++It)
-		{
-			if (It->DetectionId == Item->Object.Id)
-			{
-				Existing = *It;
-				break;
-			}
-		}
-
-		if (Existing != nullptr)
-		{
-			Actors->DestroyActor(Existing);
-			Existing = nullptr;
-		}
-
-		FRotator SpawnRotation = Item->Object.Rotation;
-		SpawnRotation.Yaw += YawOffset;
-		Existing = Cast<AFurniturePlacementActor>(Actors->SpawnActorFromClass(
-			AFurniturePlacementActor::StaticClass(),
-			Item->Object.Location,
-			SpawnRotation));
-		if (Existing == nullptr)
-		{
-			continue;
-		}
-
-		Existing->ApplyDetectedObject(Item->Object, Mesh, YawOffset, bPlaceholder, PlaceholderMaterial);
-		GEditor->SelectActor(Existing, true, false, true);
-		++Placed;
 	}
 
+	FScopedTransaction Transaction(NSLOCTEXT("FurniturePlacement", "PlaceObjects", "Place Detected Furniture"));
+	GEditor->SelectNone(false, true, false);
+	const FFurniturePlacementReport Report = PlaceDetectedFurniture(World, Catalog.Get(), SpawnObjects);
+	for (TActorIterator<AFurniturePlacementActor> It(World); It; ++It)
+	{
+		if (PlacedIds.Contains(It->DetectionId))
+		{
+			GEditor->SelectActor(*It, true, false, true);
+		}
+	}
 	GEditor->NoteSelectionChange();
 	GEditor->RedrawLevelEditingViewports();
-
-	FString Message = FString::Printf(TEXT("Placed %d objects. Each yaw was read from that object's JSON rotation."), Placed);
-	if (MissingMeshes.Num() > 0)
-	{
-		Message += TEXT(" Categories still using a block: ");
-		bool bFirst = true;
-		for (const FString& Category : MissingMeshes)
-		{
-			if (!bFirst)
-			{
-				Message += TEXT(", ");
-			}
-			Message += Category;
-			bFirst = false;
-		}
-		Message += TEXT(".");
-	}
-	SetStatus(Message);
+	SetStatus(Report.Message);
 	RefreshObjects();
 	return FReply::Handled();
 }
@@ -590,91 +439,29 @@ void SFloorplanFurnitureWindow::HandleMeshPicked(const FAssetData& AssetData)
 
 void SFloorplanFurnitureWindow::ImportJsonFile(const FString& Path)
 {
-	FString JsonText;
-	if (!FFileHelper::LoadFileToString(JsonText, *Path))
-	{
-		bJsonValid = false;
-		AssemblyPath = EAssemblyPath::None;
-		Objects.Reset();
-		PlacementOrder.Reset();
-		Categories.Reset();
-		JsonPath.Reset();
-		RefreshObjects();
-		RebuildCategories();
-		SetStatus(FString::Printf(TEXT("Could not read %s."), *Path));
-		return;
-	}
-
-	FFurnitureJsonImportResult Imported = ImportFurnitureDetectionJson(JsonText);
-	bool bComputePath = false;
-	if (!Imported.bIsDetectionData)
-	{
-		FString FloorplanText = JsonText;
-		const FFloorplanRoomSizeResult Sized = PrepareFloorplanRoomSizes(JsonText);
-		if (Sized.bIsFloorplan && !Sized.JsonText.IsEmpty())
-		{
-			FloorplanText = Sized.JsonText;
-			FFileHelper::SaveStringToFile(FloorplanText, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
-		}
-		const FFurnitureComputeResult Computed = ComputeFurnitureAssembly(FloorplanText);
-		if (Computed.bIsFloorplan)
-		{
-			bComputePath = true;
-			if (!Computed.ExportedJson.IsEmpty())
-			{
-				const FString ExportPath = FPaths::Combine(FPaths::GetPath(Path), FPaths::GetBaseFilename(Path) + TEXT(".computed.json"));
-				const bool bSaved = FFileHelper::SaveStringToFile(Computed.ExportedJson, *ExportPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
-				Imported = ImportFurnitureDetectionJson(Computed.ExportedJson);
-				if (Imported.bIsDetectionData)
-				{
-					const FString SizePrefix = Sized.bIsFloorplan && !Sized.Message.IsEmpty() ? Sized.Message + TEXT(" ") : FString();
-					Imported.Message = bSaved
-						? FString::Printf(TEXT("%sConverted to object detection. %s Saved %s."), *SizePrefix, *Computed.Message, *FPaths::GetCleanFilename(ExportPath))
-						: FString::Printf(TEXT("%sConverted to object detection. %s Could not write %s."), *SizePrefix, *Computed.Message, *FPaths::GetCleanFilename(ExportPath));
-				}
-				else
-				{
-					Imported.Message = FString::Printf(TEXT("Compute Assembly built a placement list, but it could not be read back. %s"), *Imported.Message);
-				}
-			}
-			else
-			{
-				Imported.Message = FString::Printf(TEXT("Compute Assembly. %s"), *Computed.Message);
-			}
-		}
-	}
+	const FFurnitureAssemblyLoadResult Loaded = LoadFurnitureAssemblyFile(Path, Catalog.Get());
 
 	Objects.Reset();
 	PlacementOrder.Reset();
 	Categories.Reset();
-	JsonPath = Path;
-	bJsonValid = Imported.bIsDetectionData;
-	AssemblyPath = !bJsonValid ? (bComputePath ? EAssemblyPath::Compute : EAssemblyPath::None) : (bComputePath ? EAssemblyPath::Compute : EAssemblyPath::Place);
+	JsonPath = Loaded.bReadFile ? Path : FString();
+	bJsonValid = Loaded.bSuccess;
+	AssemblyPath = !bJsonValid
+		? (Loaded.bComputed ? EAssemblyPath::Compute : EAssemblyPath::None)
+		: (Loaded.bComputed ? EAssemblyPath::Compute : EAssemblyPath::Place);
 
-	if (!Imported.bIsDetectionData)
+	if (!Loaded.bSuccess)
 	{
 		RefreshObjects();
 		RebuildCategories();
-		SetStatus(Imported.Message);
+		SetStatus(Loaded.Message);
 		return;
 	}
 
-	for (const FDetectedFurnitureObject& Object : Imported.Objects)
+	for (const FDetectedFurnitureObject& Object : Loaded.Objects)
 	{
 		TSharedPtr<FImportedFurnitureItem> Item = MakeShared<FImportedFurnitureItem>();
 		Item->Object = Object;
-		if (Catalog.IsValid())
-		{
-			if (const FFurnitureNamedCategory* Existing = Catalog->FindNamedCategory(Item->Object.Category))
-			{
-				Item->Object.Category = Existing->Name;
-			}
-			else
-			{
-				Catalog->EnsureNamedCategory(Item->Object.Category);
-				AdoptAliasMesh(Catalog.Get(), Item->Object.Category);
-			}
-		}
 		Objects.Add(Item);
 
 		bool bFound = false;
@@ -709,7 +496,7 @@ void SFloorplanFurnitureWindow::ImportJsonFile(const FString& Path)
 
 	RefreshObjects();
 	RebuildCategories();
-	SetStatus(FString::Printf(TEXT("%s  %s"), *FPaths::GetCleanFilename(Path), *Imported.Message));
+	SetStatus(FString::Printf(TEXT("%s  %s"), *FPaths::GetCleanFilename(Path), *Loaded.Message));
 }
 
 void SFloorplanFurnitureWindow::RefreshObjects()

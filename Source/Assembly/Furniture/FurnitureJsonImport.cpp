@@ -162,6 +162,29 @@ namespace
 		return 1.0;
 	}
 
+	const TArray<TSharedPtr<FJsonValue>>* DetectionArrayIfValid(const TSharedPtr<FJsonValue>& Value)
+	{
+		if (!Value.IsValid() || Value->Type != EJson::Array || Value->AsArray().Num() == 0)
+		{
+			return nullptr;
+		}
+		const TSharedPtr<FJsonValue>& First = Value->AsArray()[0];
+		if (!First.IsValid() || First->Type != EJson::Object)
+		{
+			return nullptr;
+		}
+		const TSharedPtr<FJsonObject> FirstObject = First->AsObject();
+		const bool bLooksLikeDetection =
+			FirstObject->HasField(TEXT("type")) || FirstObject->HasField(TEXT("category")) || FirstObject->HasField(TEXT("kind"));
+		const bool bHasPlace =
+			FirstObject->HasField(TEXT("position")) || FirstObject->HasField(TEXT("location")) || FirstObject->HasField(TEXT("translation"));
+		if (!bLooksLikeDetection || !bHasPlace)
+		{
+			return nullptr;
+		}
+		return &Value->AsArray();
+	}
+
 	const TArray<TSharedPtr<FJsonValue>>* FindObjectArray(const TSharedPtr<FJsonValue>& Root)
 	{
 		if (!Root.IsValid())
@@ -170,7 +193,7 @@ namespace
 		}
 		if (Root->Type == EJson::Array)
 		{
-			return &Root->AsArray();
+			return DetectionArrayIfValid(Root);
 		}
 		if (Root->Type != EJson::Object)
 		{
@@ -178,25 +201,19 @@ namespace
 		}
 
 		const TSharedPtr<FJsonObject> Object = Root->AsObject();
+		if (const TArray<TSharedPtr<FJsonValue>>* Objects = DetectionArrayIfValid(Object->TryGetField(TEXT("objects"))))
+		{
+			return Objects;
+		}
 		for (const TPair<FString, TSharedPtr<FJsonValue>>& Field : Object->Values)
 		{
-			if (!Field.Value.IsValid() || Field.Value->Type != EJson::Array || Field.Value->AsArray().Num() == 0)
+			if (Field.Key.Equals(TEXT("objects"), ESearchCase::IgnoreCase))
 			{
 				continue;
 			}
-			const TSharedPtr<FJsonValue>& First = Field.Value->AsArray()[0];
-			if (!First.IsValid() || First->Type != EJson::Object)
+			if (const TArray<TSharedPtr<FJsonValue>>* Objects = DetectionArrayIfValid(Field.Value))
 			{
-				continue;
-			}
-			const TSharedPtr<FJsonObject> FirstObject = First->AsObject();
-			const bool bLooksLikeDetection =
-				FirstObject->HasField(TEXT("type")) || FirstObject->HasField(TEXT("category")) || FirstObject->HasField(TEXT("kind"));
-			const bool bHasPlace =
-				FirstObject->HasField(TEXT("position")) || FirstObject->HasField(TEXT("location")) || FirstObject->HasField(TEXT("translation"));
-			if (bLooksLikeDetection && bHasPlace)
-			{
-				return &Field.Value->AsArray();
+				return Objects;
 			}
 		}
 		return nullptr;
@@ -319,10 +336,6 @@ FFurnitureJsonImportResult ImportFurnitureDetectionJson(const FString& JsonText)
 		Detected.Scale = Scale;
 		Detected.Size = Size * CentimetersPerUnit;
 		Detected.bPlaceAtBoundsCenter = bObjectFromCompute;
-		if (!bObjectFromCompute)
-		{
-			Detected.Location.Y = -Detected.Location.Y;
-		}
 		Result.Objects.Add(Detected);
 	}
 

@@ -1,6 +1,8 @@
 #include "Furniture/FurnitureComputeAssembly.h"
 
+#include "Furniture/FurnitureCatalog.h"
 #include "Furniture/FurnitureTypes.h"
+#include "Engine/StaticMesh.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Policies/PrettyJsonPrintPolicy.h"
@@ -44,7 +46,11 @@ namespace
 		Opposite,
 		Around,
 		Corner,
-		LongAxis
+		LongAxis,
+		/** Television plus its stand and the pieces that sit on the stand. */
+		TvUnit,
+		/** Centered dining table with chairs spaced around it. */
+		DiningSet
 	};
 
 	struct FPropDef
@@ -78,6 +84,8 @@ namespace
 		float TotalSizeX = 0.f;
 		float TotalSizeY = 0.f;
 		bool bHasTotalSize = false;
+		/** 0 picks automatically, 1 forces a wall-mounted TV, 2 prefers a TV stand. */
+		int32 TvMode = 0;
 		TArray<FDoorSpec> Doors;
 		TArray<FDoorSpec> Windows;
 	};
@@ -110,6 +118,16 @@ namespace
 		TArray<FDoorSpec> Doors;
 		TArray<FDoorSpec> Windows;
 		bool bRelaxedClearance = false;
+
+		/** Raised placement. When active, Fits also needs the cubes between Z0 and Z1 to be free. */
+		struct FLevel
+		{
+			bool bActive = false;
+			bool bFloor = true;
+			int32 Z0 = 0;
+			int32 Z1 = 0;
+		};
+		FLevel Level;
 
 		int32 IndexOf(int32 X, int32 Y, int32 Z) const
 		{
@@ -165,19 +183,58 @@ namespace
 			{
 				return false;
 			}
-			for (int32 Y = Pose.MinY; Y < Pose.MinY + Pose.SizeY; ++Y)
+			if (!Level.bActive || Level.bFloor)
 			{
-				for (int32 X = Pose.MinX; X < Pose.MinX + Pose.SizeX; ++X)
+				for (int32 Y = Pose.MinY; Y < Pose.MinY + Pose.SizeY; ++Y)
 				{
-					const ECell Cell = Get(X, Y);
-					if (Cell == ECell::Free || (bRelaxedClearance && Cell == ECell::Clearance))
+					for (int32 X = Pose.MinX; X < Pose.MinX + Pose.SizeX; ++X)
 					{
-						continue;
+						const ECell Cell = Get(X, Y);
+						if (Cell == ECell::Free || (bRelaxedClearance && Cell == ECell::Clearance))
+						{
+							continue;
+						}
+						return false;
 					}
-					return false;
+				}
+			}
+			return !Level.bActive || FitsRange(Pose, Level.Z0, Level.Z1);
+		}
+
+		/** True when every cube of the footprint between Z0 and Z1 is free of windows, swings, and other mounted pieces. */
+		bool FitsRange(const FGridPose& Pose, int32 Z0, int32 Z1) const
+		{
+			for (int32 Z = Z0; Z < Z1; ++Z)
+			{
+				for (int32 Y = Pose.MinY; Y < Pose.MinY + Pose.SizeY; ++Y)
+				{
+					for (int32 X = Pose.MinX; X < Pose.MinX + Pose.SizeX; ++X)
+					{
+						if (Get(X, Y, Z) != ECell::Free)
+						{
+							return false;
+						}
+					}
 				}
 			}
 			return true;
+		}
+
+		void OccupyRange(const FGridPose& Pose, int32 Z0, int32 Z1)
+		{
+			for (int32 Z = Z0; Z < Z1; ++Z)
+			{
+				for (int32 Y = Pose.MinY; Y < Pose.MinY + Pose.SizeY; ++Y)
+				{
+					for (int32 X = Pose.MinX; X < Pose.MinX + Pose.SizeX; ++X)
+					{
+						if (InBounds(X, Y, Z))
+						{
+							Cells[IndexOf(X, Y, Z)] = ECell::Occupied;
+						}
+					}
+				}
+			}
 		}
 
 		void Occupy(const FGridPose& Pose)
@@ -220,7 +277,20 @@ namespace
 		float Yaw = 0.f;
 		float SizeX = 0.f;
 		float SizeY = 0.f;
+		float SizeZ = 0.f;
+		float UniformScale = 1.f;
 	};
+
+	/** Unscaled catalog mesh. X is depth, Y is width, Z is height. */
+	struct FResolvedMesh
+	{
+		bool bValid = false;
+		float X = 0.f;
+		float Y = 0.f;
+		float Z = 0.f;
+	};
+
+	const TArray<FFurnitureCatalogMeshSize>* ActiveMeshSizes = nullptr;
 
 	int32 CellsForCm(float Cm)
 	{
@@ -271,6 +341,10 @@ namespace
 		case EFurnitureKind::Television: return TEXT("Television");
 		case EFurnitureKind::Plant: return TEXT("Plant");
 		case EFurnitureKind::Car: return TEXT("Car");
+		case EFurnitureKind::TvStand: return TEXT("TvStand");
+		case EFurnitureKind::Speaker: return TEXT("Speaker");
+		case EFurnitureKind::DvdPlayer: return TEXT("DvdPlayer");
+		case EFurnitureKind::GameConsole: return TEXT("GameConsole");
 		default: return TEXT("Furniture");
 		}
 	}
@@ -298,13 +372,12 @@ namespace
 			OutProps.Add({ EFurnitureKind::Fridge, EPropAnchor::Beside });
 			break;
 		case EFurnitureRoom::Dining:
-			OutProps.Add({ EFurnitureKind::DiningTable, EPropAnchor::Center });
-			OutProps.Add({ EFurnitureKind::DiningChair, EPropAnchor::Around });
+			OutProps.Add({ EFurnitureKind::DiningTable, EPropAnchor::DiningSet });
 			break;
 		case EFurnitureRoom::Living:
 			OutProps.Add({ EFurnitureKind::Sofa, EPropAnchor::Wall });
 			OutProps.Add({ EFurnitureKind::CoffeeTable, EPropAnchor::InFront });
-			OutProps.Add({ EFurnitureKind::Television, EPropAnchor::Opposite });
+			OutProps.Add({ EFurnitureKind::Television, EPropAnchor::TvUnit });
 			OutProps.Add({ EFurnitureKind::Plant, EPropAnchor::Corner });
 			break;
 		case EFurnitureRoom::Parking:
@@ -611,7 +684,7 @@ namespace
 		return true;
 	}
 
-	bool FindBestOnWall(const FRoomGrid& Grid, EPlanWall Wall, int32 AlongCells, int32 IntoCells, float AlongCm, float IntoCm, int32 DesiredAlong, FGridPose& OutPose)
+	bool FindBestOnWall(const FRoomGrid& Grid, EPlanWall Wall, int32 AlongCells, int32 IntoCells, float AlongCm, float IntoCm, int32 DesiredAlong, FGridPose& OutPose, TFunction<bool(const FGridPose&)> Accept = nullptr)
 	{
 		const int32 Limit = (Wall == EPlanWall::North || Wall == EPlanWall::South) ? Grid.CellsX - 1 : Grid.CellsY - 1;
 		bool bFound = false;
@@ -698,6 +771,10 @@ namespace
 			{
 				continue;
 			}
+			if (Accept && !Accept(Pose))
+			{
+				continue;
+			}
 
 			const int32 Distance = FMath::Abs(Along - DesiredAlong);
 			if (!bFound || Distance < BestDistance || (Distance == BestDistance && Along < BestAlong))
@@ -725,6 +802,112 @@ namespace
 			}
 		}
 		return Order;
+	}
+
+	const TCHAR* WallLabel(EPlanWall Wall)
+	{
+		switch (Wall)
+		{
+		case EPlanWall::North: return TEXT("north");
+		case EPlanWall::East: return TEXT("east");
+		case EPlanWall::South: return TEXT("south");
+		case EPlanWall::West: return TEXT("west");
+		default: return TEXT("north");
+		}
+	}
+
+	/** Viewing wall first, then the nearer perpendicular wall, then the other perpendicular wall, then the far wall. */
+	TArray<EPlanWall> TvWallOrder(const FRoomGrid& Grid, const FGridPose& Sofa, EPlanWall Preferred)
+	{
+		const bool bAlongX = Preferred == EPlanWall::North || Preferred == EPlanWall::South;
+		const int32 SofaCenter = bAlongX ? Sofa.MinX + Sofa.SizeX / 2 : Sofa.MinY + Sofa.SizeY / 2;
+		const int32 RoomCenter = bAlongX ? Grid.CellsX / 2 : Grid.CellsY / 2;
+		const bool bLowSide = SofaCenter < RoomCenter;
+		EPlanWall NearPerp = EPlanWall::East;
+		EPlanWall FarPerp = EPlanWall::West;
+		if (bAlongX)
+		{
+			NearPerp = bLowSide ? EPlanWall::West : EPlanWall::East;
+			FarPerp = bLowSide ? EPlanWall::East : EPlanWall::West;
+		}
+		else
+		{
+			NearPerp = bLowSide ? EPlanWall::North : EPlanWall::South;
+			FarPerp = bLowSide ? EPlanWall::South : EPlanWall::North;
+		}
+		TArray<EPlanWall> Order;
+		Order.Add(Preferred);
+		Order.Add(NearPerp);
+		Order.Add(FarPerp);
+		Order.Add(OppositeWall(Preferred));
+		return Order;
+	}
+
+	/** True when this pose's wall span crosses a window or door in the television's height band. */
+	bool TvSpanHitsOpening(const FRoomGrid& Grid, const FGridPose& Pose, float BottomCm, float TopCm)
+	{
+		const bool bAlongX = Pose.Wall == EPlanWall::North || Pose.Wall == EPlanWall::South;
+		const float Along0 = (bAlongX ? Pose.MinX : Pose.MinY) * CellCm;
+		const float Along1 = Along0 + (bAlongX ? Pose.SizeX : Pose.SizeY) * CellCm;
+		auto Hits = [&](const TArray<FDoorSpec>& Openings)
+		{
+			for (const FDoorSpec& Opening : Openings)
+			{
+				if (Opening.Wall != Pose.Wall)
+				{
+					continue;
+				}
+				const float Open0 = Opening.OffsetCm;
+				const float Open1 = Opening.OffsetCm + Opening.WidthCm;
+				const float OpenBottom = Opening.SillCm;
+				const float OpenTop = Opening.SillCm + Opening.HeightCm;
+				if (Along0 < Open1 && Along1 > Open0 && BottomCm < OpenTop && TopCm > OpenBottom)
+				{
+					return true;
+				}
+			}
+			return false;
+		};
+		return Hits(Grid.Windows) || Hits(Grid.Doors);
+	}
+
+	FResolvedMesh ResolveCatalogMesh(const TArray<FFurnitureCatalogMeshSize>& MeshSizes, std::initializer_list<const TCHAR*> Names)
+	{
+		for (const FFurnitureCatalogMeshSize& Size : MeshSizes)
+		{
+			if (Size.ExtentCm.X <= 1.f || Size.ExtentCm.Y <= 1.f || Size.ExtentCm.Z <= 1.f)
+			{
+				continue;
+			}
+			for (const TCHAR* Name : Names)
+			{
+				if (Size.Category.Equals(Name, ESearchCase::IgnoreCase))
+				{
+					FResolvedMesh Mesh;
+					Mesh.bValid = true;
+					Mesh.X = Size.ExtentCm.X;
+					Mesh.Y = Size.ExtentCm.Y;
+					Mesh.Z = Size.ExtentCm.Z;
+					return Mesh;
+				}
+			}
+		}
+		return FResolvedMesh();
+	}
+
+	FResolvedMesh MeshForKind(EFurnitureKind Kind)
+	{
+		if (ActiveMeshSizes == nullptr)
+		{
+			return FResolvedMesh();
+		}
+		return ResolveCatalogMesh(*ActiveMeshSizes, { FurnitureKindLabel(Kind) });
+	}
+
+	float KindHeightCm(EFurnitureKind Kind)
+	{
+		const FResolvedMesh Mesh = MeshForKind(Kind);
+		return Mesh.bValid ? Mesh.Z : FurnitureKindHeightCm(Kind);
 	}
 
 	EPlanWall PreferredPrimaryWall(const FRoomGrid& Grid)
@@ -834,7 +1017,8 @@ namespace
 		case EFurnitureKind::DiningChair: OutAlongShare = 0.22f; OutIntoShare = 0.22f; break;
 		case EFurnitureKind::Sofa: OutAlongShare = 0.65f; OutIntoShare = 0.48f; break;
 		case EFurnitureKind::CoffeeTable: OutAlongShare = 0.42f; OutIntoShare = 0.28f; break;
-		case EFurnitureKind::Television: OutAlongShare = 0.38f; OutIntoShare = 0.14f; break;
+		case EFurnitureKind::Television: OutAlongShare = 0.30f; OutIntoShare = 0.05f; break;
+		case EFurnitureKind::TvStand: OutAlongShare = 0.48f; OutIntoShare = 0.12f; break;
 		case EFurnitureKind::Plant: OutAlongShare = 0.16f; OutIntoShare = 0.16f; break;
 		case EFurnitureKind::Car: OutAlongShare = 0.86f; OutIntoShare = 0.90f; break;
 		default: break;
@@ -848,31 +1032,53 @@ namespace
 		return FMath::Clamp(RequestedCm, Minimum, Maximum);
 	}
 
-	/** Along-wall and into-room sizes from the clear distance between walls. */
+	/** Along-wall and into-room sizes. A catalog mesh uses its own width and depth, clamped to the open wall. */
 	void SizeFromWallDistance(const FRoomGrid& Grid, EFurnitureKind Kind, EPlanWall Wall, float& OutAlongCm, float& OutIntoCm)
 	{
-		float AlongShare = 0.40f;
-		float IntoShare = 0.30f;
-		CategoryWallShare(Kind, AlongShare, IntoShare);
-
 		const bool bAlongEastWest = Wall == EPlanWall::North || Wall == EPlanWall::South;
 		const float FullAlong = InteriorWallCm(Grid, bAlongEastWest);
 		const float FullAcross = InteriorWallCm(Grid, !bAlongEastWest);
 		const int32 OpenCells = LongestOpenRun(Grid, Wall);
 		const float OpenAlong = OpenCells > 0 ? OpenCells * CellCm : FullAlong;
 
+		const FResolvedMesh Mesh = MeshForKind(Kind);
+		if (Mesh.bValid)
+		{
+			OutAlongCm = ClampToWall(Mesh.Y, OpenAlong + CellCm);
+			OutIntoCm = ClampToWall(Mesh.X, FullAcross);
+			return;
+		}
+
+		float AlongShare = 0.40f;
+		float IntoShare = 0.30f;
+		CategoryWallShare(Kind, AlongShare, IntoShare);
 		OutAlongCm = ClampToWall(FullAlong * AlongShare, OpenAlong + CellCm);
 		OutIntoCm = ClampToWall(FullAcross * IntoShare, FullAcross);
 	}
 
-	/** East-west and north-south sizes from the two wall-to-wall distances. */
+	/** East-west and north-south sizes. A catalog mesh uses its own width and depth, clamped to the room. */
 	void FootprintFromWallDistance(const FRoomGrid& Grid, EFurnitureKind Kind, float& OutWidthCm, float& OutDepthCm)
 	{
+		const float WidthWall = InteriorWallCm(Grid, true);
+		const float DepthWall = InteriorWallCm(Grid, false);
+		const FResolvedMesh Mesh = MeshForKind(Kind);
+		if (Mesh.bValid)
+		{
+			if (Kind == EFurnitureKind::DiningChair || Kind == EFurnitureKind::Plant || Kind == EFurnitureKind::BedLamp)
+			{
+				const float Side = ClampToWall(FMath::Max(Mesh.X, Mesh.Y), FMath::Min(WidthWall, DepthWall));
+				OutWidthCm = Side;
+				OutDepthCm = Side;
+				return;
+			}
+			OutWidthCm = ClampToWall(Mesh.Y, WidthWall);
+			OutDepthCm = ClampToWall(Mesh.X, DepthWall);
+			return;
+		}
+
 		float WidthShare = 0.40f;
 		float DepthShare = 0.30f;
 		CategoryWallShare(Kind, WidthShare, DepthShare);
-		const float WidthWall = InteriorWallCm(Grid, true);
-		const float DepthWall = InteriorWallCm(Grid, false);
 		if (Kind == EFurnitureKind::DiningChair || Kind == EFurnitureKind::Plant || Kind == EFurnitureKind::BedLamp)
 		{
 			const float Side = ClampToWall(FMath::Min(WidthWall, DepthWall) * WidthShare, FMath::Min(WidthWall, DepthWall));
@@ -1075,7 +1281,14 @@ namespace
 		return false;
 	}
 
-	void EmitPose(const FSpaceSpec& Space, const FRoomGrid& Grid, const FGridPose& Pose, EFurnitureKind Kind, int32 Serial, TArray<FExportedObject>& OutObjects)
+
+	FString SpaceLabel(const FSpaceSpec& Space)
+	{
+		return FString::Printf(TEXT("%s %d"), *Space.Name, Space.Index + 1);
+	}
+
+	/** Z is the height of the mesh bottom above the room floor. SizeZ is an optional target height. */
+	void EmitAt(const FSpaceSpec& Space, const FRoomGrid& Grid, EFurnitureKind Kind, int32 Serial, float X, float Y, float BottomCm, float Yaw, float LocalXCm, float LocalYCm, TArray<FExportedObject>& OutObjects, float SizeZ = 0.f, float UniformScale = 1.f)
 	{
 		FExportedObject Object;
 		Object.Id = FString::Printf(TEXT("%s_%d"), *KindToken(Kind), Space.Index + 1);
@@ -1085,21 +1298,776 @@ namespace
 		}
 		Object.Category = FurnitureKindLabel(Kind);
 		Object.Label = FurnitureKindLabel(Kind);
-		Object.X = Grid.OriginX + (Pose.MinX + Pose.SizeX * 0.5f) * CellCm;
-		Object.Y = Grid.OriginY + (Pose.MinY + Pose.SizeY * 0.5f) * CellCm;
-		Object.Z = Grid.OriginZ;
-		Object.Yaw = Pose.Yaw;
-		Object.SizeX = Pose.LocalXCm;
-		Object.SizeY = Pose.LocalYCm;
+		Object.X = X;
+		Object.Y = Y;
+		Object.Z = Grid.OriginZ + BottomCm;
+		Object.Yaw = Yaw;
+		Object.SizeX = LocalXCm;
+		Object.SizeY = LocalYCm;
+		Object.SizeZ = SizeZ;
+		Object.UniformScale = UniformScale;
 		OutObjects.Add(Object);
 	}
 
-	FString SpaceLabel(const FSpaceSpec& Space)
+	void EmitPose(const FSpaceSpec& Space, const FRoomGrid& Grid, const FGridPose& Pose, EFurnitureKind Kind, int32 Serial, TArray<FExportedObject>& OutObjects, float BottomCm = 0.f, float SizeZ = 0.f, float UniformScale = 1.f)
 	{
-		return FString::Printf(TEXT("%s %d"), *Space.Name, Space.Index + 1);
+		EmitAt(Space, Grid, Kind, Serial,
+			Grid.OriginX + (Pose.MinX + Pose.SizeX * 0.5f) * CellCm,
+			Grid.OriginY + (Pose.MinY + Pose.SizeY * 0.5f) * CellCm,
+			BottomCm, Pose.Yaw, Pose.LocalXCm, Pose.LocalYCm, OutObjects, SizeZ, UniformScale);
 	}
 
-	void PlaceSpace(const FSpaceSpec& Space, FRoomGrid& Grid, TArray<FExportedObject>& OutObjects, TArray<FString>& OutNotes, int32& OutPlaced)
+	/** Small pose centered along the wall on a stand, flush with the wall side. */
+	FGridPose PoseOnStand(const FGridPose& Stand, int32 AlongCells, int32 IntoCells, float AlongCm, float IntoCm)
+	{
+		FGridPose Pose = Stand;
+		const bool bAlongX = Stand.Wall == EPlanWall::North || Stand.Wall == EPlanWall::South;
+		const int32 StandAlong = bAlongX ? Stand.SizeX : Stand.SizeY;
+		const int32 StandInto = bAlongX ? Stand.SizeY : Stand.SizeX;
+		AlongCells = FMath::Clamp(AlongCells, 1, StandAlong);
+		IntoCells = FMath::Clamp(IntoCells, 1, StandInto);
+		const int32 AlongStart = (StandAlong - AlongCells) / 2;
+		if (bAlongX)
+		{
+			Pose.MinX = Stand.MinX + AlongStart;
+			Pose.SizeX = AlongCells;
+			Pose.SizeY = IntoCells;
+			Pose.MinY = Stand.Wall == EPlanWall::North ? Stand.MinY : Stand.MinY + StandInto - IntoCells;
+		}
+		else
+		{
+			Pose.MinY = Stand.MinY + AlongStart;
+			Pose.SizeY = AlongCells;
+			Pose.SizeX = IntoCells;
+			Pose.MinX = Stand.Wall == EPlanWall::West ? Stand.MinX : Stand.MinX + StandInto - IntoCells;
+		}
+		Pose.LocalXCm = IntoCm;
+		Pose.LocalYCm = AlongCm;
+		return Pose;
+	}
+
+	/** Stand centered on a television that is already against the wall. The television stays centered along the stand. */
+	FGridPose StandAroundTelevision(const FGridPose& Tv, int32 AlongCells, int32 IntoCells, float AlongCm, float IntoCm)
+	{
+		FGridPose Pose = Tv;
+		const bool bAlongX = Tv.Wall == EPlanWall::North || Tv.Wall == EPlanWall::South;
+		const int32 TvAlong = bAlongX ? Tv.SizeX : Tv.SizeY;
+		const int32 TvInto = bAlongX ? Tv.SizeY : Tv.SizeX;
+		AlongCells = FMath::Max(AlongCells, TvAlong);
+		IntoCells = FMath::Max(IntoCells, TvInto);
+		if (bAlongX)
+		{
+			const int32 Center = Tv.MinX + Tv.SizeX / 2;
+			Pose.SizeX = AlongCells;
+			Pose.SizeY = IntoCells;
+			Pose.MinX = Center - AlongCells / 2;
+			Pose.MinY = Tv.Wall == EPlanWall::North ? Tv.MinY : Tv.MinY + Tv.SizeY - IntoCells;
+		}
+		else
+		{
+			const int32 Center = Tv.MinY + Tv.SizeY / 2;
+			Pose.SizeY = AlongCells;
+			Pose.SizeX = IntoCells;
+			Pose.MinY = Center - AlongCells / 2;
+			Pose.MinX = Tv.Wall == EPlanWall::West ? Tv.MinX : Tv.MinX + Tv.SizeX - IntoCells;
+		}
+		Pose.LocalXCm = IntoCm;
+		Pose.LocalYCm = AlongCm;
+		Pose.Yaw = Tv.Yaw;
+		Pose.Wall = Tv.Wall;
+		return Pose;
+	}
+
+	/**
+	 * Television unit. The mesh is enlarged before a wall is chosen, and the screen bottom is 50 cm above the floor.
+	 * A window or door in that height band rejects the spot. The table is then sized under the television so they meet.
+	 * Speakers and the other accessories take the same wall and rotation.
+	 */
+	bool PlaceTvUnit(const FSpaceSpec& Space, FRoomGrid& Grid, const FGridPose& SofaPose, const FResolvedMesh& TvMesh, TArray<FExportedObject>& OutObjects, TArray<FString>& OutNotes, int32& OutPlaced)
+	{
+		const float Grow = TelevisionMeshScale();
+		const float TvBottomCm = TelevisionBottomCm();
+		const float WallBottom = FurnitureKindMountBottomCm(EFurnitureKind::Television);
+		float TvIntoCm = 0.f;
+		float TvAlongCm = 0.f;
+		float TvHeightCm = 0.f;
+		if (TvMesh.bValid)
+		{
+			TvIntoCm = TvMesh.X * Grow;
+			TvAlongCm = TvMesh.Y * Grow;
+			TvHeightCm = TvMesh.Z * Grow;
+		}
+		else
+		{
+			float WidthFeet = 0.f;
+			float DepthFeet = 0.f;
+			float IgnoredYaw = 0.f;
+			FurnitureKindDefaultSize(EFurnitureKind::Television, WidthFeet, DepthFeet, IgnoredYaw);
+			constexpr float CentimetersPerFoot = 30.48f;
+			TvIntoCm = WidthFeet * CentimetersPerFoot * Grow;
+			TvAlongCm = DepthFeet * CentimetersPerFoot * Grow;
+			TvHeightCm = FurnitureKindHeightCm(EFurnitureKind::Television) * Grow;
+		}
+		const float TvTopCm = TvBottomCm + TvHeightCm;
+
+		const float SpeakerCm = 20.f;
+		const float SpeakerGap = 6.f;
+		const float DesiredStandAlong = TvAlongCm + 2.f * (SpeakerCm + SpeakerGap);
+		const float DesiredStandInto = FMath::Max(TvIntoCm + 10.f, 40.f);
+		const int32 TvAlongCells = CellsForCm(TvAlongCm);
+		const int32 TvIntoCells = CellsForCm(TvIntoCm);
+
+		const bool bSofaAlongX = SofaPose.Wall == EPlanWall::North || SofaPose.Wall == EPlanWall::South;
+		const int32 SofaCenter = bSofaAlongX ? SofaPose.MinX + SofaPose.SizeX / 2 : SofaPose.MinY + SofaPose.SizeY / 2;
+		const EPlanWall Preferred = OppositeWall(SofaPose.Wall);
+		const TArray<EPlanWall> Order = TvWallOrder(Grid, SofaPose, Preferred);
+
+		auto NoteMove = [&](EPlanWall Wall)
+		{
+			if (Wall == Preferred)
+			{
+				return;
+			}
+			const TCHAR* Relation = Wall == OppositeWall(Preferred) ? TEXT("perpendicular") : TEXT("far");
+			OutNotes.Add(FString::Printf(
+				TEXT("%s Television moved to the %s %s wall because a window or door crosses the screen. The TV table, speakers, and accessories turned with it."),
+				*SpaceLabel(Space), Relation, WallLabel(Wall)));
+		};
+
+		auto FrontClear = [](const FRoomGrid& Room, const FGridPose& Block, float AisleCm)
+		{
+			const int32 Steps = FMath::Max(1, FMath::FloorToInt(AisleCm / CellCm));
+			for (int32 Step = 1; Step <= Steps; ++Step)
+			{
+				auto Open = [&Room](int32 X, int32 Y)
+				{
+					if (!Room.InBounds(X, Y))
+					{
+						return false;
+					}
+					const ECell Cell = Room.Get(X, Y);
+					return Cell == ECell::Free || Cell == ECell::Clearance;
+				};
+				if (Block.Wall == EPlanWall::North || Block.Wall == EPlanWall::South)
+				{
+					const int32 Y = Block.Wall == EPlanWall::North ? Block.MinY + Block.SizeY - 1 + Step : Block.MinY - Step;
+					for (int32 X = Block.MinX; X < Block.MinX + Block.SizeX; ++X)
+					{
+						if (!Open(X, Y))
+						{
+							return false;
+						}
+					}
+				}
+				else
+				{
+					const int32 X = Block.Wall == EPlanWall::West ? Block.MinX + Block.SizeX - 1 + Step : Block.MinX - Step;
+					for (int32 Y = Block.MinY; Y < Block.MinY + Block.SizeY; ++Y)
+					{
+						if (!Open(X, Y))
+						{
+							return false;
+						}
+					}
+				}
+			}
+			return true;
+		};
+
+		const bool bForceWall = Space.TvMode == 1;
+		for (int32 Pass = 0; Pass < 2; ++Pass)
+		{
+			Grid.bRelaxedClearance = Pass == 1;
+			const bool bRequireAisle = Pass == 0;
+			for (EPlanWall Wall : Order)
+			{
+				const bool bAlongEastWest = Wall == EPlanWall::North || Wall == EPlanWall::South;
+				const int32 OpenCells = LongestOpenRun(Grid, Wall);
+				const float OpenAlong = OpenCells > 0 ? OpenCells * CellCm : InteriorWallCm(Grid, bAlongEastWest);
+				if (OpenAlong + 1.f < TvAlongCm)
+				{
+					continue;
+				}
+
+				if (!bForceWall)
+				{
+					const int32 Z0 = FMath::FloorToInt(TvBottomCm / CellCm);
+					const int32 Z1 = FMath::Min(Grid.CellsZ, Z0 + CellsForCm(TvHeightCm));
+					const int32 NarrowAlongCells = CellsForCm(TvAlongCm + 20.f);
+					const int32 WideAlongCells = CellsForCm(DesiredStandAlong);
+					const int32 StandIntoCells = CellsForCm(DesiredStandInto);
+					auto StandFor = [&](const FGridPose& Tv, int32 AlongCells)
+					{
+						return StandAroundTelevision(Tv, AlongCells, StandIntoCells, AlongCells * CellCm, StandIntoCells * CellCm);
+					};
+
+					FGridPose TvPose;
+					const int32 Desired = SofaCenter - TvAlongCells / 2;
+					const bool bFoundTv = FindBestOnWall(Grid, Wall, TvAlongCells, TvIntoCells, TvAlongCm, TvIntoCm, Desired, TvPose,
+						[&](const FGridPose& Candidate)
+						{
+							if (TvSpanHitsOpening(Grid, Candidate, TvBottomCm, TvTopCm) || !Grid.FitsRange(Candidate, Z0, Z1))
+							{
+								return false;
+							}
+							const bool bWide = Grid.Fits(StandFor(Candidate, WideAlongCells));
+							const bool bNarrow = Grid.Fits(StandFor(Candidate, NarrowAlongCells));
+							if (!bWide && !bNarrow)
+							{
+								return false;
+							}
+							if (bRequireAisle && !FrontClear(Grid, bWide ? StandFor(Candidate, WideAlongCells) : StandFor(Candidate, NarrowAlongCells), 90.f))
+							{
+								return false;
+							}
+							return true;
+						});
+					if (!bFoundTv)
+					{
+						continue;
+					}
+
+					const bool bWide = Grid.Fits(StandFor(TvPose, WideAlongCells));
+					const FGridPose StandPose = bWide ? StandFor(TvPose, WideAlongCells) : StandFor(TvPose, NarrowAlongCells);
+
+					Grid.Level = FRoomGrid::FLevel();
+					Grid.Occupy(StandPose);
+					EmitPose(Space, Grid, StandPose, EFurnitureKind::TvStand, 0, OutObjects, 0.f, TvBottomCm, 1.f);
+					++OutPlaced;
+
+					Grid.OccupyRange(TvPose, Z0, Z1);
+					EmitPose(Space, Grid, TvPose, EFurnitureKind::Television, 0, OutObjects, TvBottomCm, TvHeightCm, Grow);
+					++OutPlaced;
+
+						// Accessories sit on the stand top, which meets the television bottom. They share the stand's yaw.
+						const bool bAlongX = Wall == EPlanWall::North || Wall == EPlanWall::South;
+						const float AlongDirX = bAlongX ? 1.f : 0.f;
+						const float AlongDirY = bAlongX ? 0.f : 1.f;
+						float IntoDirX = 0.f;
+						float IntoDirY = 0.f;
+						switch (Wall)
+						{
+						case EPlanWall::North: IntoDirY = 1.f; break;
+						case EPlanWall::South: IntoDirY = -1.f; break;
+						case EPlanWall::West: IntoDirX = 1.f; break;
+						default: IntoDirX = -1.f; break;
+						}
+						const float BoxAlong = (bAlongX ? StandPose.SizeX : StandPose.SizeY) * CellCm;
+						const float BoxInto = (bAlongX ? StandPose.SizeY : StandPose.SizeX) * CellCm;
+						const float CenterX = Grid.OriginX + (StandPose.MinX + StandPose.SizeX * 0.5f) * CellCm;
+						const float CenterY = Grid.OriginY + (StandPose.MinY + StandPose.SizeY * 0.5f) * CellCm;
+
+						auto PlaceOnStand = [&](EFurnitureKind Kind, int32 Serial, float AlongOffset, float IntoOffset, float WidthCm, float DepthCm)
+						{
+							EmitAt(Space, Grid, Kind, Serial,
+								CenterX + AlongDirX * AlongOffset + IntoDirX * IntoOffset,
+								CenterY + AlongDirY * AlongOffset + IntoDirY * IntoOffset,
+								TvBottomCm, StandPose.Yaw, DepthCm, WidthCm, OutObjects);
+							++OutPlaced;
+						};
+
+						const float TvHalf = TvAlongCm * 0.5f;
+						const float BackInto = -BoxInto * 0.5f;
+						float SpeakerOffset = bWide ? TvHalf + SpeakerCm * 0.5f + SpeakerGap : -1.f;
+						if (SpeakerOffset + SpeakerCm * 0.5f > BoxAlong * 0.5f)
+						{
+							SpeakerOffset = -1.f;
+						}
+						if (SpeakerOffset > 0.f)
+						{
+							PlaceOnStand(EFurnitureKind::Speaker, 1, -SpeakerOffset, BackInto + SpeakerCm * 0.5f + 4.f, SpeakerCm, SpeakerCm);
+							PlaceOnStand(EFurnitureKind::Speaker, 2, SpeakerOffset, BackInto + SpeakerCm * 0.5f + 4.f, SpeakerCm, SpeakerCm);
+						}
+						else
+						{
+							OutNotes.Add(FString::Printf(TEXT("%s speakers skipped because the TV stand is too narrow"), *SpaceLabel(Space)));
+						}
+
+						const float FrontDepth = 25.f;
+						if (BoxInto >= TvIntoCm + FrontDepth + 6.f && BoxAlong >= 100.f)
+						{
+							const float FrontInto = BoxInto * 0.5f - FrontDepth * 0.5f - 3.f;
+							PlaceOnStand(EFurnitureKind::DvdPlayer, 0, -BoxAlong * 0.18f, FrontInto, 35.f, FrontDepth);
+							PlaceOnStand(EFurnitureKind::GameConsole, 0, BoxAlong * 0.18f, FrontInto, 30.f, FrontDepth);
+						}
+						else
+						{
+							OutNotes.Add(FString::Printf(TEXT("%s DVD player and console skipped because the TV stand is too small"), *SpaceLabel(Space)));
+						}
+						Grid.bRelaxedClearance = false;
+						if (!bRequireAisle)
+						{
+							OutNotes.Add(FString::Printf(TEXT("%s TV group placed with less than 90 cm of circulation in front"), *SpaceLabel(Space)));
+						}
+						NoteMove(Wall);
+						OutNotes.Add(FString::Printf(TEXT("%s Television scaled to 180%% with its bottom at %.0f cm and the table meeting the screen"), *SpaceLabel(Space), TvBottomCm));
+						return true;
+					}
+
+					if (!bForceWall)
+					{
+						continue;
+					}
+
+					const int32 Z0 = FMath::FloorToInt(WallBottom / CellCm);
+					const int32 Z1 = FMath::Min(Grid.CellsZ, Z0 + CellsForCm(TvHeightCm));
+					const float MountTop = WallBottom + TvHeightCm;
+					Grid.Level.bActive = true;
+					Grid.Level.bFloor = false;
+					Grid.Level.Z0 = Z0;
+					Grid.Level.Z1 = Z1;
+					FGridPose TvPose;
+					const bool bFound = FindBestOnWall(Grid, Wall, TvAlongCells, TvIntoCells, TvAlongCm, TvIntoCm, SofaCenter - TvAlongCells / 2, TvPose,
+						[&](const FGridPose& Candidate)
+						{
+							if (TvSpanHitsOpening(Grid, Candidate, WallBottom, MountTop))
+							{
+								return false;
+							}
+							return Grid.FitsRange(Candidate, Z0, Z1);
+						});
+					Grid.Level = FRoomGrid::FLevel();
+					if (!bFound)
+					{
+						continue;
+					}
+					Grid.OccupyRange(TvPose, Z0, Z1);
+					EmitPose(Space, Grid, TvPose, EFurnitureKind::Television, 0, OutObjects, WallBottom, TvHeightCm, Grow);
+					++OutPlaced;
+					Grid.bRelaxedClearance = false;
+					OutNotes.Add(FString::Printf(TEXT("%s Television wall-mounted at %.0f cm"), *SpaceLabel(Space), WallBottom));
+					NoteMove(Wall);
+					return true;
+				}
+			}
+		Grid.bRelaxedClearance = false;
+		Grid.Level = FRoomGrid::FLevel();
+		return false;
+	}
+
+	/**
+	 * Dining set. The table is a real size, centered on the open floor.
+	 * Chairs sit 10 cm off the edge, with 80 cm behind each chair, and an open side keeps a 90 cm aisle.
+	 */
+	bool PlaceDiningSet(const FSpaceSpec& Space, FRoomGrid& Grid, TArray<FExportedObject>& OutObjects, TArray<FString>& OutNotes, int32& OutPlaced)
+	{
+		float ChairCm = 50.f;
+		const FResolvedMesh ChairMesh = MeshForKind(EFurnitureKind::DiningChair);
+		if (ChairMesh.bValid)
+		{
+			ChairCm = FMath::Max(ChairMesh.X, ChairMesh.Y);
+		}
+		const float TuckCm = 10.f;
+		const float PullCm = 80.f;
+		const float AisleCm = 90.f;
+		const float ChairBandCm = TuckCm + ChairCm + PullCm;
+
+		auto Walkable = [](const FRoomGrid& Room, int32 X, int32 Y)
+		{
+			if (!Room.InBounds(X, Y))
+			{
+				return false;
+			}
+			const ECell Cell = Room.Get(X, Y);
+			return Cell == ECell::Free || Cell == ECell::Clearance;
+		};
+
+		auto FreeBeyond = [&Walkable](const FRoomGrid& Room, const FGridPose& Block, EPlanWall Side)
+		{
+			int32 Steps = 0;
+			for (;;)
+			{
+				++Steps;
+				bool bOpen = true;
+				if (Side == EPlanWall::North || Side == EPlanWall::South)
+				{
+					const int32 Y = Side == EPlanWall::North
+						? Block.MinY - Steps
+						: Block.MinY + Block.SizeY - 1 + Steps;
+					for (int32 X = Block.MinX; X < Block.MinX + Block.SizeX && bOpen; ++X)
+					{
+						bOpen = Walkable(Room, X, Y);
+					}
+				}
+				else
+				{
+					const int32 X = Side == EPlanWall::West
+						? Block.MinX - Steps
+						: Block.MinX + Block.SizeX - 1 + Steps;
+					for (int32 Y = Block.MinY; Y < Block.MinY + Block.SizeY && bOpen; ++Y)
+					{
+						bOpen = Walkable(Room, X, Y);
+					}
+				}
+				if (!bOpen)
+				{
+					return (Steps - 1) * CellCm;
+				}
+				if (Steps >= 40)
+				{
+					return Steps * CellCm;
+				}
+			}
+		};
+
+		auto FootprintFree = [](const FRoomGrid& Room, const FGridPose& Pose, float HeightCm)
+		{
+			if (!Room.Fits(Pose))
+			{
+				return false;
+			}
+			const int32 Z1 = FMath::Min(Room.CellsZ, CellsForCm(HeightCm));
+			return Z1 <= 1 || Room.FitsRange(Pose, 1, Z1);
+		};
+
+		auto MaxEven = [&](float SideCm)
+		{
+			if (SideCm + 0.1f < ChairCm)
+			{
+				return 0;
+			}
+			int32 Count = 1;
+			while (Count < 4 && (Count + 1) * ChairCm + Count * 10.f <= SideCm + 0.1f)
+			{
+				++Count;
+			}
+			return Count;
+		};
+
+		struct FChairPlan
+		{
+			float X0 = 0.f;
+			float Y0 = 0.f;
+			float X1 = 0.f;
+			float Y1 = 0.f;
+			float Yaw = 0.f;
+			EPlanWall Back = EPlanWall::North;
+		};
+
+		struct FLayout
+		{
+			bool bValid = false;
+			int32 Chairs = 0;
+			bool bAisle = false;
+			float CenterDist = 0.f;
+			FGridPose Table;
+			float Yaw = 0.f;
+			float LocalX = 0.f;
+			float LocalY = 0.f;
+			TArray<FChairPlan> Plans;
+		};
+
+		double SumX = 0.0;
+		double SumY = 0.0;
+		int32 FreeCount = 0;
+		for (int32 Y = 0; Y < Grid.CellsY; ++Y)
+		{
+			for (int32 X = 0; X < Grid.CellsX; ++X)
+			{
+				if (Grid.Get(X, Y) != ECell::Free)
+				{
+					continue;
+				}
+				SumX += X + 0.5;
+				SumY += Y + 0.5;
+				++FreeCount;
+			}
+		}
+		if (FreeCount == 0)
+		{
+			return false;
+		}
+		const float CentroidX = static_cast<float>(SumX / FreeCount);
+		const float CentroidY = static_cast<float>(SumY / FreeCount);
+
+		auto Better = [](const FLayout& A, const FLayout& B)
+		{
+			if (A.Chairs != B.Chairs)
+			{
+				return A.Chairs > B.Chairs;
+			}
+			if (A.bAisle != B.bAisle)
+			{
+				return A.bAisle;
+			}
+			return A.CenterDist < B.CenterDist;
+		};
+
+		auto SideChairs = [&](const FGridPose& Table, float Edge0, float Edge1, bool bAlongX, EPlanWall Back, int32 Wanted, TArray<FChairPlan>& OutPlans)
+		{
+			const float Side = Edge1 - Edge0;
+			int32 Count = FMath::Min(Wanted, MaxEven(Side));
+			for (; Count >= 1; --Count)
+			{
+				const float Gap = (Side - Count * ChairCm) / static_cast<float>(Count + 1);
+				TArray<FChairPlan> Trial;
+				bool bAll = true;
+				for (int32 Index = 0; Index < Count; ++Index)
+				{
+					const float Center = Edge0 + Gap * (Index + 1) + ChairCm * Index + ChairCm * 0.5f;
+					FChairPlan Plan;
+					Plan.Yaw = YawIntoRoom(Back);
+					Plan.Back = Back;
+					if (bAlongX)
+					{
+						Plan.X0 = Center - ChairCm * 0.5f;
+						Plan.X1 = Center + ChairCm * 0.5f;
+						if (Back == EPlanWall::North)
+						{
+							Plan.Y1 = Table.MinY * CellCm - TuckCm;
+							Plan.Y0 = Plan.Y1 - ChairCm;
+						}
+						else
+						{
+							Plan.Y0 = (Table.MinY + Table.SizeY) * CellCm + TuckCm;
+							Plan.Y1 = Plan.Y0 + ChairCm;
+						}
+					}
+					else
+					{
+						Plan.Y0 = Center - ChairCm * 0.5f;
+						Plan.Y1 = Center + ChairCm * 0.5f;
+						if (Back == EPlanWall::West)
+						{
+							Plan.X1 = Table.MinX * CellCm - TuckCm;
+							Plan.X0 = Plan.X1 - ChairCm;
+						}
+						else
+						{
+							Plan.X0 = (Table.MinX + Table.SizeX) * CellCm + TuckCm;
+							Plan.X1 = Plan.X0 + ChairCm;
+						}
+					}
+					FGridPose Pose;
+					Pose.MinX = FMath::FloorToInt(Plan.X0 / CellCm + 0.001f);
+					Pose.MinY = FMath::FloorToInt(Plan.Y0 / CellCm + 0.001f);
+					Pose.SizeX = FMath::Max(1, FMath::CeilToInt(Plan.X1 / CellCm - 0.001f) - Pose.MinX);
+					Pose.SizeY = FMath::Max(1, FMath::CeilToInt(Plan.Y1 / CellCm - 0.001f) - Pose.MinY);
+					if (!FootprintFree(Grid, Pose, KindHeightCm(EFurnitureKind::DiningChair)) || FreeBeyond(Grid, Pose, Back) + 0.1f < PullCm)
+					{
+						bAll = false;
+						break;
+					}
+					Trial.Add(Plan);
+				}
+				if (bAll)
+				{
+					OutPlans.Append(Trial);
+					return Count;
+				}
+			}
+			return 0;
+		};
+
+		struct FPreset
+		{
+			float LongCm;
+			float ShortCm;
+			int32 OnLong;
+			int32 OnShort;
+		};
+		TArray<FPreset> Presets;
+		const FResolvedMesh TableMesh = MeshForKind(EFurnitureKind::DiningTable);
+		if (TableMesh.bValid)
+		{
+			FPreset MeshPreset;
+			MeshPreset.LongCm = FMath::Max(TableMesh.X, TableMesh.Y);
+			MeshPreset.ShortCm = FMath::Min(TableMesh.X, TableMesh.Y);
+			MeshPreset.OnLong = MeshPreset.LongCm >= 160.f ? 2 : 1;
+			MeshPreset.OnShort = MeshPreset.ShortCm >= 80.f ? 1 : 0;
+			Presets.Add(MeshPreset);
+		}
+		const FPreset FallbackPresets[] =
+		{
+			{ 220.f, 100.f, 3, 1 },
+			{ 180.f, 90.f, 3, 1 },
+			{ 180.f, 90.f, 2, 1 },
+			{ 160.f, 90.f, 2, 1 },
+			{ 140.f, 80.f, 2, 0 },
+			{ 120.f, 80.f, 2, 0 },
+			{ 100.f, 100.f, 1, 1 },
+			{ 90.f, 90.f, 1, 1 },
+			{ 80.f, 80.f, 1, 0 }
+		};
+		Presets.Append(FallbackPresets, UE_ARRAY_COUNT(FallbackPresets));
+
+		const FRoomGrid::FLevel SavedLevel = Grid.Level;
+		Grid.Level = FRoomGrid::FLevel();
+		FLayout Best;
+		for (const FPreset& Preset : Presets)
+		{
+			for (int32 Turn = 0; Turn < 2; ++Turn)
+			{
+				const bool bLongOnX = Turn == 0;
+				const float WorldX = bLongOnX ? Preset.LongCm : Preset.ShortCm;
+				const float WorldY = bLongOnX ? Preset.ShortCm : Preset.LongCm;
+				const int32 WantNorth = bLongOnX ? Preset.OnLong : Preset.OnShort;
+				const int32 WantEast = bLongOnX ? Preset.OnShort : Preset.OnLong;
+				const int32 CellsX = CellsForCm(WorldX);
+				const int32 CellsY = CellsForCm(WorldY);
+				if (CellsX + 2 >= Grid.CellsX || CellsY + 2 >= Grid.CellsY)
+				{
+					continue;
+				}
+
+				for (int32 Y = 1; Y + CellsY < Grid.CellsY; ++Y)
+				{
+					for (int32 X = 1; X + CellsX < Grid.CellsX; ++X)
+					{
+						FGridPose Table;
+						Table.MinX = X;
+						Table.MinY = Y;
+						Table.SizeX = CellsX;
+						Table.SizeY = CellsY;
+						if (!FootprintFree(Grid, Table, KindHeightCm(EFurnitureKind::DiningTable)))
+						{
+							continue;
+						}
+						const float TableDist = FMath::Abs((X + CellsX * 0.5f) - CentroidX) + FMath::Abs((Y + CellsY * 0.5f) - CentroidY);
+
+						const float TableX0 = Table.MinX * CellCm;
+						const float TableX1 = (Table.MinX + Table.SizeX) * CellCm;
+						const float TableY0 = Table.MinY * CellCm;
+						const float TableY1 = (Table.MinY + Table.SizeY) * CellCm;
+						auto PairSides = [&](float Edge0, float Edge1, bool bAlongX, EPlanWall First, EPlanWall Second, int32 Wanted, TArray<FChairPlan>& OutPlans)
+						{
+							TArray<FChairPlan> A;
+							TArray<FChairPlan> B;
+							int32 Count = FMath::Min(SideChairs(Table, Edge0, Edge1, bAlongX, First, Wanted, A), SideChairs(Table, Edge0, Edge1, bAlongX, Second, Wanted, B));
+							while (Count >= 1)
+							{
+								A.Reset();
+								B.Reset();
+								const int32 GotA = SideChairs(Table, Edge0, Edge1, bAlongX, First, Count, A);
+								const int32 GotB = SideChairs(Table, Edge0, Edge1, bAlongX, Second, Count, B);
+								if (GotA == Count && GotB == Count)
+								{
+									OutPlans.Append(A);
+									OutPlans.Append(B);
+									return Count;
+								}
+								--Count;
+							}
+							return 0;
+						};
+						TArray<FChairPlan> Plans;
+						const int32 UsedNS = PairSides(TableX0, TableX1, true, EPlanWall::North, EPlanWall::South, WantNorth, Plans);
+						const int32 UsedEW = PairSides(TableY0, TableY1, false, EPlanWall::East, EPlanWall::West, WantEast, Plans);
+						auto Walking = [&](EPlanWall Side, bool bHasChairs)
+						{
+							const float Clear = FreeBeyond(Grid, Table, Side);
+							return bHasChairs ? Clear - ChairBandCm : Clear;
+						};
+						const bool bPathY = Walking(EPlanWall::North, UsedNS > 0) + 0.1f >= AisleCm
+							&& Walking(EPlanWall::South, UsedNS > 0) + 0.1f >= AisleCm;
+						const bool bPathX = Walking(EPlanWall::East, UsedEW > 0) + 0.1f >= AisleCm
+							&& Walking(EPlanWall::West, UsedEW > 0) + 0.1f >= AisleCm;
+
+						FLayout Layout;
+						Layout.bValid = true;
+						Layout.Chairs = Plans.Num();
+						Layout.bAisle = bPathX || bPathY;
+						Layout.CenterDist = TableDist;
+						Layout.Table = Table;
+						Layout.Yaw = bLongOnX ? 0.f : 90.f;
+						Layout.LocalX = Preset.LongCm;
+						Layout.LocalY = Preset.ShortCm;
+						Layout.Plans = MoveTemp(Plans);
+						if (!Best.bValid || Better(Layout, Best))
+						{
+							Best = MoveTemp(Layout);
+						}
+					}
+				}
+			}
+		}
+
+		if (!Best.bValid)
+		{
+			Grid.Level = SavedLevel;
+			return false;
+		}
+
+		auto OccupyFootprint = [](FRoomGrid& Room, const FGridPose& Pose)
+		{
+			for (int32 Y = Pose.MinY; Y < Pose.MinY + Pose.SizeY; ++Y)
+			{
+				for (int32 X = Pose.MinX; X < Pose.MinX + Pose.SizeX; ++X)
+				{
+					if (!Room.InBounds(X, Y))
+					{
+						continue;
+					}
+					ECell& Cell = Room.Cells[Room.IndexOf(X, Y, 0)];
+					if (Cell == ECell::Free || Cell == ECell::Clearance)
+					{
+						Cell = ECell::Occupied;
+					}
+				}
+			}
+		};
+
+		OccupyFootprint(Grid, Best.Table);
+		const float TableCenterX = Grid.OriginX + (Best.Table.MinX + Best.Table.SizeX * 0.5f) * CellCm;
+		const float TableCenterY = Grid.OriginY + (Best.Table.MinY + Best.Table.SizeY * 0.5f) * CellCm;
+		EmitAt(Space, Grid, EFurnitureKind::DiningTable, 0, TableCenterX, TableCenterY, 0.f, Best.Yaw, Best.LocalX, Best.LocalY, OutObjects);
+		++OutPlaced;
+
+		int32 Serial = 1;
+		for (const FChairPlan& Plan : Best.Plans)
+		{
+			FGridPose Pose;
+			Pose.MinX = FMath::FloorToInt(Plan.X0 / CellCm + 0.001f);
+			Pose.MinY = FMath::FloorToInt(Plan.Y0 / CellCm + 0.001f);
+			Pose.SizeX = FMath::Max(1, FMath::CeilToInt(Plan.X1 / CellCm - 0.001f) - Pose.MinX);
+			Pose.SizeY = FMath::Max(1, FMath::CeilToInt(Plan.Y1 / CellCm - 0.001f) - Pose.MinY);
+			OccupyFootprint(Grid, Pose);
+			for (int32 Step = 1; Step <= CellsForCm(PullCm); ++Step)
+			{
+				if (Plan.Back == EPlanWall::North || Plan.Back == EPlanWall::South)
+				{
+					const int32 Y = Plan.Back == EPlanWall::North ? Pose.MinY - Step : Pose.MinY + Pose.SizeY - 1 + Step;
+					for (int32 X = Pose.MinX; X < Pose.MinX + Pose.SizeX; ++X)
+					{
+						Grid.SetIfFree(X, Y, ECell::Clearance);
+					}
+				}
+				else
+				{
+					const int32 X = Plan.Back == EPlanWall::West ? Pose.MinX - Step : Pose.MinX + Pose.SizeX - 1 + Step;
+					for (int32 Y = Pose.MinY; Y < Pose.MinY + Pose.SizeY; ++Y)
+					{
+						Grid.SetIfFree(X, Y, ECell::Clearance);
+					}
+				}
+			}
+			EmitAt(Space, Grid, EFurnitureKind::DiningChair, Serial,
+				Grid.OriginX + (Plan.X0 + Plan.X1) * 0.5f,
+				Grid.OriginY + (Plan.Y0 + Plan.Y1) * 0.5f,
+				0.f, Plan.Yaw, ChairCm, ChairCm, OutObjects);
+			++Serial;
+			++OutPlaced;
+		}
+
+		if (Best.Chairs > 0)
+		{
+			OutNotes.Add(FString::Printf(
+				TEXT("%s dining table centered with %d chairs, 10 cm from the table and 80 cm behind each chair%s"),
+				*SpaceLabel(Space),
+				Best.Chairs,
+				Best.bAisle ? TEXT("") : TEXT("; the room leaves less than 90 cm of walking space beside the set")));
+		}
+		else
+		{
+			OutNotes.Add(FString::Printf(
+				TEXT("%s dining table centered, but no chair kept 80 cm clear behind it"),
+				*SpaceLabel(Space)));
+		}
+		Grid.Level = SavedLevel;
+		return true;
+	}
+
+	void PlaceSpace(const FSpaceSpec& Space, FRoomGrid& Grid, const FResolvedMesh& TvMesh, TArray<FExportedObject>& OutObjects, TArray<FString>& OutNotes, int32& OutPlaced)
 	{
 		TArray<FPropDef> Props;
 		PropsForRoom(Space.Room, Props);
@@ -1116,6 +2084,17 @@ namespace
 			{
 				OutNotes.Add(FString::Printf(TEXT("%s %s skipped because the primary piece was not placed"), *SpaceLabel(Space), *PropName));
 				continue;
+			}
+
+			// Every piece is tested up to its own height. A spot is rejected when a window or door swing
+			// crosses the cubes the piece would fill, so tall pieces move to another wall.
+			Grid.Level = FRoomGrid::FLevel();
+			if (Prop.Anchor != EPropAnchor::TvUnit && FurnitureKindMountBottomCm(Prop.Kind) < 0.f)
+			{
+				Grid.Level.bActive = true;
+				Grid.Level.bFloor = true;
+				Grid.Level.Z0 = 1;
+				Grid.Level.Z1 = FMath::Min(Grid.CellsZ, CellsForCm(KindHeightCm(Prop.Kind)));
 			}
 
 			if (Prop.Anchor == EPropAnchor::Around)
@@ -1137,8 +2116,10 @@ namespace
 				if (!bChairsFit)
 				{
 					OutNotes.Add(FString::Printf(TEXT("%s %s does not fit"), *SpaceLabel(Space), *PropName));
+					Grid.Level = FRoomGrid::FLevel();
 					continue;
 				}
+				Grid.Level = FRoomGrid::FLevel();
 				for (int32 ChairIndex = 0; ChairIndex < Chairs.Num(); ++ChairIndex)
 				{
 					EmitPose(Space, Grid, Chairs[ChairIndex], Prop.Kind, ChairIndex + 1, OutObjects);
@@ -1149,6 +2130,42 @@ namespace
 					OutNotes.Add(FString::Printf(TEXT("%s %s placed with reduced clearance"), *SpaceLabel(Space), *PropName));
 				}
 				continue;
+			}
+
+			if (Prop.Anchor == EPropAnchor::DiningSet)
+			{
+				Grid.Level = FRoomGrid::FLevel();
+				if (!PlaceDiningSet(Space, Grid, OutObjects, OutNotes, OutPlaced))
+				{
+					OutNotes.Add(FString::Printf(TEXT("%s %s does not fit"), *SpaceLabel(Space), *PropName));
+				}
+				else
+				{
+					bPrimaryPlaced = true;
+				}
+				continue;
+			}
+
+			if (Prop.Anchor == EPropAnchor::TvUnit)
+			{
+				if (!PlaceTvUnit(Space, Grid, PrimaryPose, TvMesh, OutObjects, OutNotes, OutPlaced))
+				{
+					OutNotes.Add(FString::Printf(TEXT("%s %s does not fit"), *SpaceLabel(Space), *PropName));
+				}
+				continue;
+			}
+
+			// Wall-mounted fixtures (sinks, wash basin) are tested at their mounting height.
+			const float MountBottom = FurnitureKindMountBottomCm(Prop.Kind);
+			const bool bMounted = MountBottom > 0.f;
+			const int32 MountZ0 = bMounted ? FMath::FloorToInt(MountBottom / CellCm) : 0;
+			const int32 MountZ1 = bMounted ? MountZ0 + CellsForCm(KindHeightCm(Prop.Kind)) : 0;
+			if (bMounted)
+			{
+				Grid.Level.bActive = true;
+				Grid.Level.bFloor = FurnitureKindReservesFloorBelow(Prop.Kind);
+				Grid.Level.Z0 = MountZ0;
+				Grid.Level.Z1 = MountZ1;
 			}
 
 			FGridPose Pose;
@@ -1211,6 +2228,8 @@ namespace
 				bPlaced = FindCentered(Grid, CellsForCm(WidthCm), CellsForCm(DepthCm), 0.f, WidthCm, DepthCm, Pose);
 				break;
 			}
+			case EPropAnchor::DiningSet:
+				break;
 			case EPropAnchor::LongAxis:
 			{
 				float WidthCm = 0.f;
@@ -1238,6 +2257,7 @@ namespace
 				}
 			}
 			Grid.bRelaxedClearance = false;
+			Grid.Level = FRoomGrid::FLevel();
 
 			if (!bPlaced)
 			{
@@ -1245,8 +2265,19 @@ namespace
 				continue;
 			}
 
-			Grid.Occupy(Pose);
-			EmitPose(Space, Grid, Pose, Prop.Kind, 0, OutObjects);
+			if (bMounted)
+			{
+				Grid.OccupyRange(Pose, MountZ0, MountZ1);
+				if (FurnitureKindReservesFloorBelow(Prop.Kind))
+				{
+					Grid.Occupy(Pose);
+				}
+			}
+			else
+			{
+				Grid.Occupy(Pose);
+			}
+			EmitPose(Space, Grid, Pose, Prop.Kind, 0, OutObjects, bMounted ? MountBottom : 0.f);
 			++OutPlaced;
 			if (bReduced)
 			{
@@ -1334,6 +2365,11 @@ namespace
 	{
 		OutSpace = FSpaceSpec();
 		OutSpace.Index = Index;
+		FString TvText;
+		if (ReadStringField(Object, { TEXT("tv"), TEXT("tvMount") }, TvText))
+		{
+			OutSpace.TvMode = TvText.Contains(TEXT("wall")) ? 1 : (TvText.Contains(TEXT("stand")) ? 2 : 0);
+		}
 		if (!ReadStringField(Object, { TEXT("name"), TEXT("room"), TEXT("label"), TEXT("category") }, OutSpace.Name))
 		{
 			OutError = TEXT("A room is missing a name");
@@ -1499,18 +2535,27 @@ namespace
 			Rotation->SetNumberField(TEXT("yaw"), static_cast<double>(Object.Yaw));
 			Rotation->SetNumberField(TEXT("roll"), 0.0);
 			Item->SetObjectField(TEXT("rotation"), Rotation);
-			Item->SetNumberField(TEXT("scale"), 1.0);
+			Item->SetNumberField(TEXT("scale"), static_cast<double>(Object.UniformScale));
 
 			TArray<TSharedPtr<FJsonValue>> Size;
 			Size.Add(MakeShared<FJsonValueNumber>(static_cast<double>(Object.SizeX)));
 			Size.Add(MakeShared<FJsonValueNumber>(static_cast<double>(Object.SizeY)));
+			if (Object.SizeZ > 1.f)
+			{
+				Size.Add(MakeShared<FJsonValueNumber>(static_cast<double>(Object.SizeZ)));
+			}
 			Item->SetArrayField(TEXT("size"), Size);
 			Items.Add(MakeShared<FJsonValueObject>(Item));
 		}
 
+		TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("units"), TEXT("cm"));
+		Root->SetStringField(TEXT("source"), TEXT("compute"));
+		Root->SetArrayField(TEXT("objects"), Items);
+
 		FString Out;
 		TSharedRef<TJsonWriter<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>> Writer = TJsonWriterFactory<TCHAR, TPrettyJsonPrintPolicy<TCHAR>>::Create(&Out);
-		FJsonSerializer::Serialize(Items, Writer);
+		FJsonSerializer::Serialize(Root, Writer);
 		return Out;
 	}
 
@@ -1625,6 +2670,135 @@ namespace
 			}
 		}
 	}
+
+	void UseMeshSizes(const TArray<FFurnitureCatalogMeshSize>* Sizes)
+	{
+		ActiveMeshSizes = Sizes;
+	}
+
+	bool HasMeasuredMesh(const TArray<FFurnitureCatalogMeshSize>& Sizes, const FString& Category)
+	{
+		for (const FFurnitureCatalogMeshSize& Size : Sizes)
+		{
+			if (Size.Category.Equals(Category, ESearchCase::IgnoreCase)
+				&& Size.ExtentCm.X > 1.f
+				&& Size.ExtentCm.Y > 1.f
+				&& Size.ExtentCm.Z > 1.f)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void AliasNames(EFurnitureKind Kind, TArray<const TCHAR*>& OutNames)
+	{
+		OutNames.Reset();
+		switch (Kind)
+		{
+		case EFurnitureKind::Television:
+			OutNames.Add(TEXT("tv"));
+			OutNames.Add(TEXT("TV"));
+			break;
+		case EFurnitureKind::DiningTable:
+			OutNames.Add(TEXT("table"));
+			break;
+		case EFurnitureKind::DiningChair:
+			OutNames.Add(TEXT("chair"));
+			break;
+		case EFurnitureKind::WashBasin:
+			OutNames.Add(TEXT("basin"));
+			OutNames.Add(TEXT("washbasin"));
+			break;
+		case EFurnitureKind::CoffeeTable:
+			OutNames.Add(TEXT("coffee"));
+			break;
+		case EFurnitureKind::KitchenSink:
+			OutNames.Add(TEXT("kitchensink"));
+			break;
+		case EFurnitureKind::UtilitySink:
+			OutNames.Add(TEXT("utilitysink"));
+			break;
+		case EFurnitureKind::BedLamp:
+			OutNames.Add(TEXT("lamp"));
+			OutNames.Add(TEXT("bedlamp"));
+			break;
+		case EFurnitureKind::TvStand:
+			OutNames.Add(TEXT("tv stand"));
+			OutNames.Add(TEXT("tvstand"));
+			OutNames.Add(TEXT("tv table"));
+			OutNames.Add(TEXT("tvtable"));
+			break;
+		default:
+			break;
+		}
+	}
+
+	const FFurnitureMeshOption* CatalogMeshForKind(UFurnitureCatalog* Catalog, EFurnitureKind Kind)
+	{
+		if (Catalog == nullptr)
+		{
+			return nullptr;
+		}
+		if (const FFurnitureMeshOption* Option = Catalog->GetNamedCategoryMesh(FurnitureKindLabel(Kind)))
+		{
+			return Option;
+		}
+		TArray<const TCHAR*> Aliases;
+		AliasNames(Kind, Aliases);
+		for (const TCHAR* Alias : Aliases)
+		{
+			if (const FFurnitureMeshOption* Option = Catalog->GetNamedCategoryMesh(Alias))
+			{
+				return Option;
+			}
+		}
+		return Catalog->GetCategoryMesh(Kind);
+	}
+
+	void AppendCatalogMeshSizes(TArray<FFurnitureCatalogMeshSize>& Sizes)
+	{
+		UFurnitureCatalog* Catalog = LoadObject<UFurnitureCatalog>(nullptr, TEXT("/Game/Furniture/DA_FurnitureCatalog.DA_FurnitureCatalog"));
+		if (Catalog == nullptr)
+		{
+			Catalog = LoadObject<UFurnitureCatalog>(nullptr, TEXT("/Game/Furniture/DA_FurnitureCatalog"));
+		}
+		if (Catalog == nullptr)
+		{
+			return;
+		}
+
+		int32 KindCount = 0;
+		const EFurnitureKind* Kinds = AllFurnitureKinds(KindCount);
+		for (int32 Index = 0; Index < KindCount; ++Index)
+		{
+			const EFurnitureKind Kind = Kinds[Index];
+			const FString Category = FurnitureKindLabel(Kind);
+			if (HasMeasuredMesh(Sizes, Category))
+			{
+				continue;
+			}
+			const FFurnitureMeshOption* Option = CatalogMeshForKind(Catalog, Kind);
+			if (Option == nullptr || Option->Mesh.IsNull())
+			{
+				continue;
+			}
+			UStaticMesh* Mesh = Option->Mesh.LoadSynchronous();
+			if (Mesh == nullptr)
+			{
+				continue;
+			}
+			const FBoxSphereBounds Bounds = Mesh->GetBounds();
+			FFurnitureCatalogMeshSize Size;
+			Size.Category = Category;
+			Size.ExtentCm = FVector(Bounds.BoxExtent.X * 2.f, Bounds.BoxExtent.Y * 2.f, Bounds.BoxExtent.Z * 2.f);
+			if (Size.ExtentCm.X <= 1.f || Size.ExtentCm.Y <= 1.f || Size.ExtentCm.Z <= 1.f)
+			{
+				continue;
+			}
+			Sizes.Add(Size);
+		}
+	}
 }
 
 FFloorplanRoomSizeResult PrepareFloorplanRoomSizes(const FString& JsonText)
@@ -1675,7 +2849,7 @@ FFloorplanRoomSizeResult PrepareFloorplanRoomSizes(const FString& JsonText)
 	return Result;
 }
 
-FFurnitureComputeResult ComputeFurnitureAssembly(const FString& JsonText)
+FFurnitureComputeResult ComputeFurnitureAssembly(const FString& JsonText, const TArray<FFurnitureCatalogMeshSize>& MeshSizes)
 {
 	FFurnitureComputeResult Result;
 	TSharedPtr<FJsonValue> Root;
@@ -1742,6 +2916,10 @@ FFurnitureComputeResult ComputeFurnitureAssembly(const FString& JsonText)
 	int32 Placed = 0;
 	int32 RoomCount = 0;
 	int32 HallCount = 0;
+	TArray<FFurnitureCatalogMeshSize> MeasuredMeshes = MeshSizes;
+	AppendCatalogMeshSizes(MeasuredMeshes);
+	UseMeshSizes(&MeasuredMeshes);
+	const FResolvedMesh TvMesh = ResolveCatalogMesh(MeasuredMeshes, { TEXT("Television"), TEXT("tv"), TEXT("TV") });
 	for (const FSpaceSpec& Space : Spaces)
 	{
 		if (Space.bHall)
@@ -1769,10 +2947,18 @@ FFurnitureComputeResult ComputeFurnitureAssembly(const FString& JsonText)
 			Notes.Add(FString::Printf(TEXT("%s is an unknown room, so no props were chosen"), *SpaceLabel(Space)));
 			continue;
 		}
-		PlaceSpace(Space, Grid, Objects, Notes, Placed);
+		PlaceSpace(Space, Grid, TvMesh, Objects, Notes, Placed);
 	}
 
-	Result.Message = FString::Printf(TEXT("No object data. 10 cm cubes mark walls, door swings, and windows. Props use the ground cubes in category order. Read %d rooms and %d halls. Placed %d objects."), RoomCount, HallCount, Placed);
+	int32 MeasuredCount = 0;
+	for (const FFurnitureCatalogMeshSize& Size : MeasuredMeshes)
+	{
+		if (Size.ExtentCm.X > 1.f && Size.ExtentCm.Y > 1.f && Size.ExtentCm.Z > 1.f)
+		{
+			++MeasuredCount;
+		}
+	}
+	Result.Message = FString::Printf(TEXT("No object data. 10 cm cubes mark walls, door swings, and windows. Props use the ground cubes in category order. Read %d rooms and %d halls. Placed %d objects from %d catalog meshes."), RoomCount, HallCount, Placed, MeasuredCount);
 	if (Notes.Num() > 0)
 	{
 		Result.Message += FString::Printf(TEXT(" Skipped: %s."), *FString::Join(Notes, TEXT("; ")));
@@ -1787,5 +2973,6 @@ FFurnitureComputeResult ComputeFurnitureAssembly(const FString& JsonText)
 	{
 		UE_LOG(LogFurnitureCompute, Log, TEXT("Skip: %s"), *Note);
 	}
+	UseMeshSizes(nullptr);
 	return Result;
 }

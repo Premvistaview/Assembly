@@ -31,5 +31,18 @@ struct FFloorplanRoomSizeResult
 	FString JsonText;
 };
 
+/** Native mesh bounds in centimeters. X is depth, Y is width, Z is height. */
+struct FFurnitureCatalogMeshSize
+{
+	FString Category;
+	FVector ExtentCm = FVector::ZeroVector;
+};
+
 ASSEMBLY_API FFloorplanRoomSizeResult PrepareFloorplanRoomSizes(const FString& JsonText);
-ASSEMBLY_API FFurnitureComputeResult ComputeFurnitureAssembly(const FString& JsonText);
+
+/**
+ * MeshSizes carries catalog meshes measured before placement.
+ * Each kind uses its mesh bounds for the footprint. A missing mesh keeps the wall-share size.
+ * The television is enlarged from its mesh, and a window at screen height moves the set to another wall.
+ */
+ASSEMBLY_API FFurnitureComputeResult ComputeFurnitureAssembly(const FString& JsonText, const TArray<FFurnitureCatalogMeshSize>& MeshSizes);

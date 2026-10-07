@@ -35,7 +35,11 @@ enum class EFurnitureKind : uint8
 	Television UMETA(DisplayName = "Television"),
 	Plant UMETA(DisplayName = "Plant"),
 	Car UMETA(DisplayName = "Car"),
-	BedLamp UMETA(DisplayName = "Bed Lamp")
+	BedLamp UMETA(DisplayName = "Bed Lamp"),
+	TvStand UMETA(DisplayName = "TV Stand"),
+	Speaker UMETA(DisplayName = "Speaker"),
+	DvdPlayer UMETA(DisplayName = "DVD Player"),
+	GameConsole UMETA(DisplayName = "Game Console")
 };
 
 /**
@@ -103,7 +107,12 @@ struct ASSEMBLY_API FFloorplanDetectionResult
 	TArray<FFloorplanDetection> Items;
 };
 
-/** One detected object imported from JSON. Location is centimeters. Rotation is degrees. Scale is the mesh scale. */
+/**
+ * One detected object imported from JSON.
+ * Location is plan space in centimeters from the plan northwest corner: +X east, +Y south, +Z up.
+ * Same axes as Compute Assembly export. Import applies units only (no axis flip).
+ * Rotation is degrees. Scale is the mesh scale.
+ */
 USTRUCT(BlueprintType)
 struct ASSEMBLY_API FDetectedFurnitureObject
 {
@@ -155,7 +164,11 @@ inline const EFurnitureKind* AllFurnitureKinds(int32& OutCount)
 		EFurnitureKind::Television,
 		EFurnitureKind::Plant,
 		EFurnitureKind::Car,
-		EFurnitureKind::BedLamp
+		EFurnitureKind::BedLamp,
+		EFurnitureKind::TvStand,
+		EFurnitureKind::Speaker,
+		EFurnitureKind::DvdPlayer,
+		EFurnitureKind::GameConsole
 	};
 	OutCount = UE_ARRAY_COUNT(Kinds);
 	return Kinds;
@@ -197,6 +210,10 @@ inline const TCHAR* FurnitureKindLabel(EFurnitureKind Kind)
 	case EFurnitureKind::Plant: return TEXT("Plant");
 	case EFurnitureKind::Car: return TEXT("Car");
 	case EFurnitureKind::BedLamp: return TEXT("Bed Lamp");
+	case EFurnitureKind::TvStand: return TEXT("TV Stand");
+	case EFurnitureKind::Speaker: return TEXT("Speaker");
+	case EFurnitureKind::DvdPlayer: return TEXT("DVD Player");
+	case EFurnitureKind::GameConsole: return TEXT("Game Console");
 	default: return TEXT("Furniture");
 	}
 }
@@ -256,6 +273,10 @@ inline EFurnitureRoom FurnitureKindRoom(EFurnitureKind Kind)
 	case EFurnitureKind::Sofa:
 	case EFurnitureKind::CoffeeTable:
 	case EFurnitureKind::Television:
+	case EFurnitureKind::TvStand:
+	case EFurnitureKind::Speaker:
+	case EFurnitureKind::DvdPlayer:
+	case EFurnitureKind::GameConsole:
 	case EFurnitureKind::Plant:
 	default:
 		return EFurnitureRoom::Living;
@@ -285,6 +306,10 @@ inline void FurnitureKindDefaultSize(EFurnitureKind Kind, float& OutWidthFeet, f
 	case EFurnitureKind::Sofa: OutWidthFeet = 7.2f; OutDepthFeet = 5.5f; OutYawDegrees = 0.f; break;
 	case EFurnitureKind::CoffeeTable: OutWidthFeet = 2.f; OutDepthFeet = 3.2f; OutYawDegrees = 0.f; break;
 	case EFurnitureKind::Television: OutWidthFeet = 0.8f; OutDepthFeet = 3.8f; OutYawDegrees = 180.f; break;
+	case EFurnitureKind::TvStand: OutWidthFeet = 4.5f; OutDepthFeet = 1.5f; OutYawDegrees = 180.f; break;
+	case EFurnitureKind::Speaker: OutWidthFeet = 0.7f; OutDepthFeet = 0.7f; OutYawDegrees = 180.f; break;
+	case EFurnitureKind::DvdPlayer: OutWidthFeet = 1.2f; OutDepthFeet = 0.9f; OutYawDegrees = 180.f; break;
+	case EFurnitureKind::GameConsole: OutWidthFeet = 1.0f; OutDepthFeet = 0.9f; OutYawDegrees = 180.f; break;
 	case EFurnitureKind::Plant: OutWidthFeet = 1.3f; OutDepthFeet = 1.3f; OutYawDegrees = 0.f; break;
 	case EFurnitureKind::Car: OutWidthFeet = 5.8f; OutDepthFeet = 12.f; OutYawDegrees = -90.f; break;
 	default: break;
@@ -297,6 +322,18 @@ inline float MannequinHeightCm()
 	return 180.f;
 }
 
+/** Television mesh scale applied before it is placed in compute assembly and at spawn. */
+inline float TelevisionMeshScale()
+{
+	return 0.8f;
+}
+
+/** Bottom of the television above the floor, in centimeters. The TV stand top meets this. */
+inline float TelevisionBottomCm()
+{
+	return 50.f;
+}
+
 /** Real height for this kind, in centimeters, compared with the 180 cm mannequin. */
 inline float FurnitureKindHeightCm(EFurnitureKind Kind)
 {
@@ -306,18 +343,44 @@ inline float FurnitureKindHeightCm(EFurnitureKind Kind)
 	case EFurnitureKind::BedLamp: return 45.f;
 	case EFurnitureKind::Wardrobe: return 200.f;
 	case EFurnitureKind::Toilet: return 80.f;
-	case EFurnitureKind::WashBasin: return 85.f;
-	case EFurnitureKind::UtilitySink: return 90.f;
-	case EFurnitureKind::KitchenSink: return 90.f;
+	case EFurnitureKind::WashBasin: return 30.f;
+	case EFurnitureKind::UtilitySink: return 35.f;
+	case EFurnitureKind::KitchenSink: return 25.f;
 	case EFurnitureKind::Stove: return 90.f;
 	case EFurnitureKind::Fridge: return 175.f;
 	case EFurnitureKind::DiningTable: return 75.f;
 	case EFurnitureKind::DiningChair: return 95.f;
 	case EFurnitureKind::Sofa: return 85.f;
 	case EFurnitureKind::CoffeeTable: return 42.f;
-	case EFurnitureKind::Television: return 80.f;
+	case EFurnitureKind::Television: return 60.f;
+	case EFurnitureKind::TvStand: return 45.f;
+	case EFurnitureKind::Speaker: return 35.f;
+	case EFurnitureKind::DvdPlayer: return 8.f;
+	case EFurnitureKind::GameConsole: return 8.f;
 	case EFurnitureKind::Plant: return 110.f;
 	case EFurnitureKind::Car: return 150.f;
 	default: return 90.f;
 	}
+}
+
+/**
+ * Height of the mesh bottom above the floor for wall-mounted kinds, in centimeters.
+ * Returns a negative value for kinds that stand on the floor.
+ */
+inline float FurnitureKindMountBottomCm(EFurnitureKind Kind)
+{
+	switch (Kind)
+	{
+	case EFurnitureKind::WashBasin: return 55.f;
+	case EFurnitureKind::UtilitySink: return 55.f;
+	case EFurnitureKind::KitchenSink: return 65.f;
+	case EFurnitureKind::Television: return 100.f;
+	default: return -1.f;
+	}
+}
+
+/** Kinds that hang on a wall and leave the floor cubes below them to a cabinet or pedestal. */
+inline bool FurnitureKindReservesFloorBelow(EFurnitureKind Kind)
+{
+	return Kind == EFurnitureKind::WashBasin || Kind == EFurnitureKind::UtilitySink || Kind == EFurnitureKind::KitchenSink;
 }

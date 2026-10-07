@@ -132,39 +132,57 @@ void AFurniturePlacementActor::ApplyDetectedObject(
 	const float MeshY = FMath::Max(Bounds.BoxExtent.Y * 2.f, 1.f);
 	const float MeshZ = FMath::Max(Bounds.BoxExtent.Z * 2.f, 1.f);
 
-	float Uniform = 1.f;
-	if (Object.bPlaceAtBoundsCenter)
+	const bool bGrownTelevision = Object.bPlaceAtBoundsCenter && Kind == EFurnitureKind::Television;
+	const bool bContactStand = Object.bPlaceAtBoundsCenter
+		&& Kind == EFurnitureKind::TvStand
+		&& Object.Size.X > 1.f
+		&& Object.Size.Y > 1.f
+		&& Object.Size.Z > 1.f;
+	if (bGrownTelevision)
 	{
-		const float TargetHeight = FurnitureKindHeightCm(Kind);
-		Uniform = TargetHeight / MeshZ;
-		if (Object.Size.X > 1.f && Object.Size.Y > 1.f)
+		const float Grown = Object.Scale.X > 1.01f ? Object.Scale.X : TelevisionMeshScale();
+		Scale = FVector(Grown);
+	}
+	else if (bContactStand)
+	{
+		Scale = FVector(Object.Size.X / MeshX, Object.Size.Y / MeshY, Object.Size.Z / MeshZ);
+	}
+	else
+	{
+		float Uniform = 1.f;
+		if (Object.bPlaceAtBoundsCenter)
 		{
-			const float FitX = Object.Size.X / (MeshX * Uniform);
-			const float FitY = Object.Size.Y / (MeshY * Uniform);
-			const float FloorFit = FMath::Min(FitX, FitY);
-			if (FloorFit < 1.f)
+			const float TargetHeight = FurnitureKindHeightCm(Kind);
+			Uniform = TargetHeight / MeshZ;
+			if (Object.Size.X > 1.f && Object.Size.Y > 1.f)
 			{
-				Uniform *= FloorFit;
+				const float FitX = Object.Size.X / (MeshX * Uniform);
+				const float FitY = Object.Size.Y / (MeshY * Uniform);
+				const float FloorFit = FMath::Min(FitX, FitY);
+				if (FloorFit < 1.f)
+				{
+					Uniform *= FloorFit;
+				}
+			}
+			const float MaxHeight = FMath::Max(TargetHeight, MannequinHeightCm() * 1.15f);
+			const float Height = MeshZ * Uniform;
+			if (Height > MaxHeight)
+			{
+				Uniform *= MaxHeight / Height;
 			}
 		}
-		const float MaxHeight = FMath::Max(TargetHeight, MannequinHeightCm() * 1.15f);
-		const float Height = MeshZ * Uniform;
-		if (Height > MaxHeight)
+		else if (Object.Size.X > 1.f && Object.Size.Y > 1.f)
 		{
-			Uniform *= MaxHeight / Height;
+			Uniform = FMath::Min(Object.Size.X / MeshX, Object.Size.Y / MeshY);
+			const float Height = MeshZ * Uniform;
+			const float MaxHeight = FMath::Max(FurnitureKindHeightCm(Kind), MannequinHeightCm() * 1.15f);
+			if (Height > MaxHeight)
+			{
+				Uniform *= MaxHeight / Height;
+			}
 		}
+		Scale *= Uniform;
 	}
-	else if (Object.Size.X > 1.f && Object.Size.Y > 1.f)
-	{
-		Uniform = FMath::Min(Object.Size.X / MeshX, Object.Size.Y / MeshY);
-		const float Height = MeshZ * Uniform;
-		const float MaxHeight = FMath::Max(FurnitureKindHeightCm(Kind), MannequinHeightCm() * 1.15f);
-		if (Height > MaxHeight)
-		{
-			Uniform *= MaxHeight / Height;
-		}
-	}
-	Scale *= Uniform;
 
 	const float BottomZ = (Bounds.Origin.Z - Bounds.BoxExtent.Z) * Scale.Z;
 	FVector Location = Object.Location;
