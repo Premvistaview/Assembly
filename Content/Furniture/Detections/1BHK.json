@@ -1,0 +1,362 @@
+[
+  {
+    "type": "bed",
+    "position": [
+      250.209,
+      836.738,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 0,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.93,
+    "source": "vision",
+    "size": [
+      84.486,
+      142.977
+    ]
+  },
+  {
+    "type": "wardrobe",
+    "position": [
+      326.571,
+      836.738,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 90,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.84,
+    "source": "vision",
+    "size": [
+      142.977,
+      51.991
+    ]
+  },
+  {
+    "type": "toilet",
+    "position": [
+      532.1,
+      881.418,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 0,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.38,
+    "source": "vision",
+    "size": [
+      38.994,
+      25.996
+    ]
+  },
+  {
+    "type": "sink",
+    "position": [
+      787.59,
+      831.051,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 270,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.86,
+    "source": "vision",
+    "size": [
+      42.243,
+      65.802
+    ]
+  },
+  {
+    "type": "stove",
+    "position": [
+      847.705,
+      742.097,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 180,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.84,
+    "source": "vision",
+    "size": [
+      36.557,
+      49.554
+    ]
+  },
+  {
+    "type": "fridge",
+    "position": [
+      831.864,
+      653.143,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 180,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.9,
+    "source": "vision",
+    "size": [
+      73.113,
+      58.49
+    ]
+  },
+  {
+    "type": "table",
+    "position": [
+      558.096,
+      723.819,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 0,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.94,
+    "source": "vision",
+    "size": [
+      108.857,
+      60.115
+    ]
+  },
+  {
+    "type": "chair",
+    "position": [
+      533.319,
+      766.062,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 270,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.84,
+    "source": "vision",
+    "size": [
+      24.371,
+      31.682
+    ]
+  },
+  {
+    "type": "chair",
+    "position": [
+      582.873,
+      766.062,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 270,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.84,
+    "source": "vision",
+    "size": [
+      24.371,
+      31.682
+    ]
+  },
+  {
+    "type": "chair",
+    "position": [
+      498.387,
+      724.225,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 0,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.8,
+    "source": "vision",
+    "size": [
+      10.561,
+      33.307
+    ]
+  },
+  {
+    "type": "chair",
+    "position": [
+      617.805,
+      724.225,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 180,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.8,
+    "source": "vision",
+    "size": [
+      10.561,
+      33.307
+    ]
+  },
+  {
+    "type": "chair",
+    "position": [
+      532.913,
+      681.982,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 90,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.84,
+    "source": "vision",
+    "size": [
+      23.559,
+      30.87
+    ]
+  },
+  {
+    "type": "chair",
+    "position": [
+      582.873,
+      681.982,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 90,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.84,
+    "source": "vision",
+    "size": [
+      23.559,
+      31.682
+    ]
+  },
+  {
+    "type": "sofa",
+    "position": [
+      625.116,
+      511.385,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 0,
+      "roll": 0
+    },
+    "scale": 0.8,
+    "confidence": 0.9,
+    "source": "vision",
+    "size": [
+      169.785,
+      60.928
+    ]
+  },
+  {
+    "type": "table",
+    "position": [
+      651.112,
+      420.806,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 0,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.88,
+    "source": "vision",
+    "size": [
+      43.055,
+      77.987
+    ]
+  },
+  {
+    "type": "tv",
+    "position": [
+      845.674,
+      351.755,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 180,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.78,
+    "source": "vision",
+    "size": [
+      38.994,
+      34.119
+    ]
+  },
+  {
+    "type": "plant",
+    "position": [
+      779.872,
+      353.38,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 0,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.64,
+    "source": "vision",
+    "size": [
+      24.371,
+      24.371
+    ]
+  },
+  {
+    "type": "car",
+    "position": [
+      279.86,
+      414.713,
+      0
+    ],
+    "rotation": {
+      "pitch": 0,
+      "yaw": 90,
+      "roll": 0
+    },
+    "scale": 1,
+    "confidence": 0.9,
+    "source": "vision",
+    "size": [
+      246.147,
+      127.542
+    ]
+  }
+]

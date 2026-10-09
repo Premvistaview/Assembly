@@ -1,0 +1,404 @@
+{
+	"units": "cm",
+	"source": "compute",
+	"objects": [
+		{
+			"type": "Bed",
+			"id": "Bed_1",
+			"label": "Bed",
+			"source": "compute",
+			"position": [
+				140,
+				130,
+				0
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 0,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				254.6865234375,
+				235.4674072265625
+			]
+		},
+		{
+			"type": "Bed Lamp",
+			"id": "BedLamp_1",
+			"label": "Bed Lamp",
+			"source": "compute",
+			"position": [
+				35,
+				285,
+				0
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 0,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				44.80560302734375,
+				46.939201354980469
+			]
+		},
+		{
+			"type": "Wardrobe",
+			"id": "Wardrobe_1",
+			"label": "Wardrobe",
+			"source": "compute",
+			"position": [
+				305,
+				115,
+				0
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 180,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				41.2694091796875,
+				210
+			]
+		},
+		{
+			"type": "Toilet",
+			"id": "Toilet_2",
+			"label": "Toilet",
+			"source": "compute",
+			"position": [
+				380.27999877929688,
+				35,
+				0
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 90,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				47.9471435546875,
+				60.7908935546875
+			]
+		},
+		{
+			"type": "Wash Basin",
+			"id": "WashBasin_2",
+			"label": "Wash Basin",
+			"source": "compute",
+			"position": [
+				550.280029296875,
+				40,
+				55
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 90,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				50.959999084472656,
+				49.509033203125
+			]
+		},
+		{
+			"type": "Utility Sink",
+			"id": "UtilitySink_3",
+			"label": "Utility Sink",
+			"source": "compute",
+			"position": [
+				784.5999755859375,
+				35,
+				55
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 180,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				66.169677734375,
+				49.509033203125
+			]
+		},
+		{
+			"type": "Stove",
+			"id": "Stove_4",
+			"label": "Stove",
+			"source": "compute",
+			"position": [
+				789.5999755859375,
+				201.67999267578125,
+				0
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 180,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				57.377849578857422,
+				80.427139282226562
+			]
+		},
+		{
+			"type": "Kitchen Sink",
+			"id": "KitchenSink_4",
+			"label": "Kitchen Sink",
+			"source": "compute",
+			"position": [
+				784.5999755859375,
+				281.67999267578125,
+				65
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 180,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				66.169677734375,
+				49.509033203125
+			]
+		},
+		{
+			"type": "Fridge",
+			"id": "Fridge_4",
+			"label": "Fridge",
+			"source": "compute",
+			"position": [
+				654.5999755859375,
+				306.67999267578125,
+				0
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": -90,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				71.6361083984375,
+				63.560733795166016
+			]
+		},
+		{
+			"type": "Dining Table",
+			"id": "DiningTable_5",
+			"label": "Dining Table",
+			"source": "compute",
+			"position": [
+				475.27999877929688,
+				267.16000366210938,
+				0
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 90,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				140,
+				80
+			]
+		},
+		{
+			"type": "Car",
+			"id": "Car_6",
+			"label": "Car",
+			"source": "compute",
+			"position": [
+				150,
+				591,
+				0
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 90,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				395.4921875,
+				199.19613647460938
+			]
+		},
+		{
+			"type": "Sofa",
+			"id": "Sofa_7",
+			"label": "Sofa",
+			"source": "compute",
+			"position": [
+				584.79998779296875,
+				421,
+				0
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 90,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				58.5,
+				120
+			]
+		},
+		{
+			"type": "Coffee Table",
+			"id": "CoffeeTable_7",
+			"label": "Coffee Table",
+			"source": "compute",
+			"position": [
+				479.79998779296875,
+				486,
+				0
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 0,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				60.3388671875,
+				62.8509521484375
+			]
+		},
+		{
+			"type": "TV Stand",
+			"id": "TvStand_7",
+			"label": "TV Stand",
+			"source": "compute",
+			"position": [
+				584.79998779296875,
+				656,
+				0
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": -90,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				110,
+				80,
+				50
+			]
+		},
+		{
+			"type": "Television",
+			"id": "Television_7",
+			"label": "Television",
+			"source": "compute",
+			"position": [
+				589.79998779296875,
+				661,
+				50
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": -90,
+				"roll": 0
+			},
+			"scale": 0.80000001192092896,
+			"size": [
+				92.116043090820312,
+				20.332529067993164,
+				57.517139434814453
+			]
+		},
+		{
+			"type": "Speaker",
+			"id": "Speaker_7_1",
+			"label": "Speaker",
+			"source": "compute",
+			"position": [
+				558.63372802734375,
+				697,
+				50
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": -90,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				20,
+				20
+			]
+		},
+		{
+			"type": "Speaker",
+			"id": "Speaker_7_2",
+			"label": "Speaker",
+			"source": "compute",
+			"position": [
+				610.96624755859375,
+				697,
+				50
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": -90,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				20,
+				20
+			]
+		},
+		{
+			"type": "Plant",
+			"id": "Plant_7",
+			"label": "Plant",
+			"source": "compute",
+			"position": [
+				329.79998779296875,
+				406,
+				0
+			],
+			"rotation":
+			{
+				"pitch": 0,
+				"yaw": 0,
+				"roll": 0
+			},
+			"scale": 1,
+			"size": [
+				29.192958831787109,
+				29.192958831787109
+			]
+		}
+	]
+}
